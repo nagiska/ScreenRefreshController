@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -34,7 +36,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.screenrefresh.controller.root.DisplayMode
 import com.screenrefresh.controller.root.RateController
 import com.screenrefresh.controller.root.RootExecutor
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +44,6 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         setContent {
             MaterialTheme {
                 Surface(Modifier.fillMaxSize()) { MainScreen() }
@@ -52,100 +52,125 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private val PROFILE_RATES = listOf(120, 132, 144, 156, 165)
+
 @Composable
 fun MainScreen() {
     val scope = rememberCoroutineScope()
-    var modes by remember { mutableStateOf<List<DisplayMode>>(emptyList()) }
-    var currentRate by remember { mutableIntStateOf(60) }
+    var currentRate by remember { mutableIntStateOf(120) }
     var debug by remember { mutableStateOf<List<RootExecutor.DebugEntry>>(emptyList()) }
     var rootOk by remember { mutableStateOf<Boolean?>(null) }
     var shizukuOk by remember { mutableStateOf(false) }
+    var showDebug by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         rootOk = RootExecutor.isRootAvailable()
         shizukuOk = RootExecutor.isShizukuAvailable()
-        RateController.refreshModes()
-        modes = RateController.getModeInfo()
+        currentRate = RateController.getCurrentRate()
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-            Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                Text("当前: $currentRate Hz", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(6.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Root: ${when(rootOk) { true -> "✅"; false -> "❌"; else -> "…" }}")
-                    Text("Shizuku: ${if(shizukuOk) "✅" else "❌"}")
+        // Header: current rate
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        ) {
+            Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("当前刷新率", fontSize = 14.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Spacer(Modifier.height(4.dp))
+                Text("${currentRate} Hz", fontSize = 56.sp, fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    Text("Root: ${if(rootOk == true) "✅" else if(rootOk == false) "❌" else "…"}",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text("Shizuku: ${if(shizukuOk) "✅" else "❌"}",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
-                Text("模式: ${modes.size}个 — ${modes.map{"${it.fps}Hz(m${it.id})"}.joinToString(" ")}",
-                    fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(16.dp))
 
-        if (modes.isNotEmpty()) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                modes.distinctBy{it.fps}.sortedBy{it.fps}.forEach{ m ->
-                    FilledTonalButton(onClick={
-                        scope.launch(Dispatchers.IO){
-                            RateController.setRate(m.fps)
+        // Profile rate buttons
+        Text("步进方案: 120 → 132 → 144 → 156 → 165", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            PROFILE_RATES.forEach { rate ->
+                val isActive = rate == currentRate
+                Button(
+                    onClick = {
+                        scope.launch(Dispatchers.IO) {
+                            RateController.setRate(rate)
+                            currentRate = RateController.getCurrentRate()
                             debug = RateController.lastDebugEntries
                         }
-                    }, modifier=Modifier.weight(1f)){ Text("${m.fps}Hz", fontSize=10.sp) }
+                    },
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = if (isActive) ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ) else ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("${rate}Hz", fontSize = 13.sp, fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal)
+                        if (isActive) Text("当前", fontSize = 9.sp)
+                    }
                 }
             }
         }
 
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(4.dp)){
-            listOf(120, 132, 144, 156, 165).forEach{ r->
-                FilledTonalButton(onClick={
-                    scope.launch(Dispatchers.IO){
-                        RateController.setRate(r)
-                        debug = RateController.lastDebugEntries
-                    }
-                }, modifier=Modifier.weight(1f)){ Text("${r}Hz", fontSize=10.sp) }
+        Spacer(Modifier.height(16.dp))
+
+        // Tools row
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilledTonalButton(onClick = {
+                scope.launch(Dispatchers.IO) {
+                    RateController.runDiagnostic()
+                    debug = RateController.lastDebugEntries
+                    showDebug = true
+                }
+            }, modifier = Modifier.weight(1f)) { Text("诊断") }
+            FilledTonalButton(onClick = {
+                scope.launch(Dispatchers.IO) {
+                    currentRate = RateController.getCurrentRate()
+                }
+            }, modifier = Modifier.weight(1f)) { Text("刷新状态") }
+            FilledTonalButton(onClick = {
+                showDebug = !showDebug
+                if(!showDebug) RateController.clearDebug()
+            }, modifier = Modifier.weight(0.6f)) {
+                Text(if(showDebug) "收起" else "日志")
             }
         }
 
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(6.dp)){
-            FilledTonalButton(onClick={
-                scope.launch(Dispatchers.IO){ RateController.runDiagnostic(); debug=RateController.lastDebugEntries }
-            }, modifier=Modifier.weight(1f)){ Text("诊断", fontSize=12.sp) }
-            FilledTonalButton(onClick={
-                scope.launch(Dispatchers.IO){ RateController.refreshModes(); modes=RateController.getModeInfo() }
-            }, modifier=Modifier.weight(1f)){ Text("扫描", fontSize=12.sp) }
-            FilledTonalButton(onClick={ RateController.clearDebug(); debug=emptyList() },
-                modifier=Modifier.weight(0.6f)){ Text("清空", fontSize=12.sp) }
-        }
-
-        if(debug.isNotEmpty()){
+        // Debug log
+        if (showDebug && debug.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
-            Card(Modifier.fillMaxWidth(), shape=RoundedCornerShape(8.dp)){
-                Column(Modifier.fillMaxWidth().padding(10.dp)){
-                    Text("日志", fontWeight=FontWeight.Bold, fontSize=12.sp)
-                    Spacer(Modifier.height(4.dp))
-                    debug.forEach{ e->
+            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) {
+                Column(Modifier.fillMaxWidth().padding(10.dp)) {
+                    debug.forEach { e ->
                         val icon = if(e.success) "✅" else "❌"
-                        val via = if(e.via.isNotEmpty()) "[${e.via}] " else ""
-                        Column(Modifier.fillMaxWidth().padding(vertical=1.dp)){
-                            Text("$icon $via${e.method} ${e.elapsedMs}ms",
-                                fontSize=9.sp, fontFamily=FontFamily.Monospace)
-                            Text("  ${e.command.take(70)}", fontSize=7.sp,
-                                fontFamily=FontFamily.Monospace, color=MaterialTheme.colorScheme.onSurfaceVariant)
-                            if(e.output.isNotEmpty() && e.output!="(empty)"){
-                                Text("  → ${e.output.take(300)}", fontSize=7.sp,
-                                    fontFamily=FontFamily.Monospace, color=MaterialTheme.colorScheme.tertiary)
+                        Column(Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
+                            Text("$icon [${e.via}] ${e.method} ${e.elapsedMs}ms",
+                                fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                            Text("  ${e.command.take(70)}", fontSize = 7.sp,
+                                fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if(e.output != "(empty)" && e.output.isNotBlank()){
+                                Text("  → ${e.output.take(200)}", fontSize = 7.sp,
+                                    fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.tertiary)
                             }
                         }
                     }
                 }
             }
         }
+
         Spacer(Modifier.height(24.dp))
     }
 }

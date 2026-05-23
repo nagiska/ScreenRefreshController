@@ -74,5 +74,19 @@ object RateController {
         lastDebugEntries = entries
     }
 
+    suspend fun getCurrentRate(): Int = withContext(Dispatchers.IO) {
+        val keys = listOf(
+            "settings get secure miui_refresh_rate",
+            "settings get secure user_refresh_rate",
+            "settings get secure peak_refresh_rate",
+        )
+        for (cmd in keys) {
+            val r = RootExecutor.execute("$cmd 2>/dev/null || echo 0")
+            val rate = r.output.trim().toFloatOrNull()?.toInt()
+            if (rate != null && rate in 30..300) return@withContext rate
+        }
+        120
+    }
+
     fun clearDebug() { lastDebugEntries = emptyList() }
 }
