@@ -24,12 +24,17 @@ class SettingsManager(context: Context) {
         get() = prefs.getInt(KEY_DEFAULT_RATE, 60)
         set(value) = prefs.edit().putInt(KEY_DEFAULT_RATE, value).apply()
 
+    var selectedProfileId: String
+        get() = prefs.getString(KEY_PROFILE, "standard") ?: "standard"
+        set(value) = prefs.edit().putString(KEY_PROFILE, value).apply()
+
     companion object {
         private const val PREFS_NAME = "screen_refresh_settings"
         private const val KEY_STEP_INTERVAL = "step_interval_ms"
         private const val KEY_AUTO_START = "auto_start"
         private const val KEY_RESET_ON_EXIT = "reset_on_exit"
         private const val KEY_DEFAULT_RATE = "default_rate"
+        private const val KEY_PROFILE = "selected_profile"
         const val DEFAULT_STEP_INTERVAL = 3000L
     }
 }

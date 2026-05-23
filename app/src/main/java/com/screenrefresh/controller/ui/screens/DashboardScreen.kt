@@ -41,6 +41,7 @@ fun DashboardScreen(
     currentRate: Int,
     isStepping: Boolean,
     supportedRates: List<Int>,
+    profileName: String,
     onToggleService: () -> Unit
 ) {
     Column(
@@ -155,15 +156,22 @@ fun DashboardScreen(
                         .padding(20.dp)
                 ) {
                     Text(
-                        text = "支持刷新率",
+                        text = "当前方案",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = profileName,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = supportedRates.joinToString(" → ") { "${it}Hz" },
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium
+                        text = "步进顺序: ${supportedRates.joinToString(" → ") { "${it}Hz" }}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }

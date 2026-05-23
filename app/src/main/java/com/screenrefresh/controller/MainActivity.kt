@@ -28,8 +28,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.screenrefresh.controller.data.AppDatabase
-import com.screenrefresh.controller.data.WhitelistEntity
 import com.screenrefresh.controller.root.DeviceConfig
+import com.screenrefresh.controller.root.StepProfiles
 import com.screenrefresh.controller.service.AppDetectionAccessibilityService
 import com.screenrefresh.controller.service.SettingsManager
 import com.screenrefresh.controller.ui.screens.DashboardScreen
@@ -81,12 +81,15 @@ private fun MainContent(
     val whitelistItems by app.database.whitelistDao().getAllFlow().collectAsState(initial = emptyList())
     var supportedRates by remember { mutableStateOf<List<Int>>(emptyList()) }
     var currentRate by remember { mutableIntStateOf(60) }
+    var currentProfileName by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         val config = withContext(Dispatchers.IO) {
             DeviceConfig.detectRefreshRates(app)
         }
-        supportedRates = DeviceConfig.getAvailableTiers(config.supportedRates)
+        val profile = StepProfiles.getById(app.settingsManager.selectedProfileId)
+        currentProfileName = profile.name
+        supportedRates = StepProfiles.getAvailableRates(profile, config.supportedRates)
         currentRate = config.currentRate.toInt()
     }
 
@@ -113,16 +116,17 @@ private fun MainContent(
                 )
             }
         }
-    ) { padding ->
-        when (selectedTab) {
-            0 -> DashboardScreen(
-                isServiceRunning = isServiceRunning,
-                isRootAvailable = isRootAvailable,
-                currentRate = currentRate,
-                isStepping = false,
-                supportedRates = supportedRates,
-                onToggleService = onToggleService
-            )
+            ) { padding ->
+                when (selectedTab) {
+                    0 -> DashboardScreen(
+                        isServiceRunning = isServiceRunning,
+                        isRootAvailable = isRootAvailable,
+                        currentRate = currentRate,
+                        isStepping = false,
+                        supportedRates = supportedRates,
+                        profileName = currentProfileName,
+                        onToggleService = onToggleService
+                    )
             1 -> WhitelistScreen(
                 whitelist = whitelistItems,
                 onAdd = { entity ->

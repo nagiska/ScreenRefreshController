@@ -16,6 +16,7 @@ import com.screenrefresh.controller.data.WhitelistEntity
 import com.screenrefresh.controller.root.DeviceConfig
 import com.screenrefresh.controller.root.RefreshRateController
 import com.screenrefresh.controller.root.RootShell
+import com.screenrefresh.controller.root.StepProfiles
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,6 +41,7 @@ class AppDetectionAccessibilityService : AccessibilityService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val refreshController = RefreshRateController()
     private lateinit var database: AppDatabase
+    private lateinit var settingsManager: SettingsManager
 
     private var availableRates: List<Int> = emptyList()
     private var currentDetectedApp: String = ""
@@ -49,6 +51,7 @@ class AppDetectionAccessibilityService : AccessibilityService() {
         super.onCreate()
         instance = this
         database = AppDatabase.getInstance(this)
+        settingsManager = SettingsManager(this)
 
         createNotificationChannel()
         scope.launch {
@@ -64,15 +67,19 @@ class AppDetectionAccessibilityService : AccessibilityService() {
         }
 
         refreshController.initDefaultRate()
+        refreshAvailableRates()
 
+        Log.d(TAG, "Available rates: $availableRates")
+    }
+
+    private suspend fun refreshAvailableRates() {
         val config = DeviceConfig.detectRefreshRates(this)
-        availableRates = DeviceConfig.getAvailableTiers(config.supportedRates)
+        val profile = StepProfiles.getById(settingsManager.selectedProfileId)
+        availableRates = StepProfiles.getAvailableRates(profile, config.supportedRates)
 
         if (availableRates.isEmpty()) {
             availableRates = config.supportedRates.filter { it >= 60 }
         }
-
-        Log.d(TAG, "Available rates: $availableRates")
     }
 
     override fun onServiceConnected() {
@@ -120,9 +127,10 @@ class AppDetectionAccessibilityService : AccessibilityService() {
     }
 
     private suspend fun startRefreshRateStepping() {
+        refreshAvailableRates()
         if (availableRates.isEmpty()) return
 
-        val intervalMs = loadStepInterval()
+        val intervalMs = settingsManager.stepIntervalMs
         refreshController.startStepping(
             scope = scope,
             availableRates = availableRates,
@@ -139,6 +147,12 @@ class AppDetectionAccessibilityService : AccessibilityService() {
         )
     }
 
+    fun refreshProfile() {
+        scope.launch {
+            refreshAvailableRates()
+        }
+    }
+
     private fun getAppName(packageName: String): String {
         return try {
             val pm = packageManager
@@ -149,11 +163,6 @@ class AppDetectionAccessibilityService : AccessibilityService() {
         } catch (e: Exception) {
             packageName
         }
-    }
-
-    private fun loadStepInterval(): Long {
-        val prefs = getSharedPreferences("settings", MODE_PRIVATE)
-        return prefs.getLong("step_interval_ms", 3000L)
     }
 
     fun resetToDefaultRefreshRate() {

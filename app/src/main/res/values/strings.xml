@@ -28,4 +28,8 @@
     <string name="app_search_hint">搜索应用...</string>
     <string name="reset_on_exit">退出时恢复默认</string>
     <string name="default_refresh_rate">默认刷新率</string>
+    <string name="step_profile">步进方案</string>
+    <string name="profile_standard">标准 120→132→144</string>
+    <string name="profile_high">高帧 132→144→156→165</string>
+    <string name="profile_full">全段 120→132→144→155→165</string>
 </resources>

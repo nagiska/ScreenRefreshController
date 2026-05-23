@@ -2,8 +2,6 @@ package com.screenrefresh.controller.root
 
 import android.content.Context
 import android.hardware.display.DisplayManager
-import android.os.Build
-import android.util.DisplayMetrics
 import android.view.Display
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -72,15 +70,6 @@ object DeviceConfig {
             val output = process.inputStream.bufferedReader().readText().trim()
             output.toFloatOrNull()?.toInt() ?: 0
         } catch (_: Exception) { 0 }
-    }
-
-    fun getStepTiers(): List<Int> {
-        return listOf(120, 132, 144, 155, 165)
-    }
-
-    fun getAvailableTiers(supportedRates: List<Int>): List<Int> {
-        val tiers = getStepTiers()
-        return tiers.filter { supportedRates.contains(it) }
     }
 
     suspend fun parseDtboRefreshRates(): List<Int> {
