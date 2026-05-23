@@ -52,7 +52,9 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private val PROFILE_RATES = listOf(120, 132, 144, 156, 165)
+private val PROFILE_RATES = listOf(120, 132, 144, 156)
+private val SET_OFFSET = mapOf(120 to 120, 132 to 144, 144 to 156, 156 to 165)
+private val READ_REVERSE = mapOf(120 to 120, 144 to 132, 156 to 144, 165 to 156)
 
 @Composable
 fun MainScreen() {
@@ -66,7 +68,8 @@ fun MainScreen() {
     LaunchedEffect(Unit) {
         rootOk = RootExecutor.isRootAvailable()
         shizukuOk = RootExecutor.isShizukuAvailable()
-        currentRate = RateController.getCurrentRate()
+        val raw = RateController.getCurrentRate()
+        currentRate = READ_REVERSE[raw] ?: raw
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
@@ -97,13 +100,15 @@ fun MainScreen() {
         Text("步进方案: 120 → 132 → 144 → 156 → 165", fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            PROFILE_RATES.forEach { rate ->
+                PROFILE_RATES.forEach { rate ->
+                val setVal = SET_OFFSET[rate] ?: rate
                 val isActive = rate == currentRate
                 Button(
                     onClick = {
                         scope.launch(Dispatchers.IO) {
-                            RateController.setRate(rate)
-                            currentRate = RateController.getCurrentRate()
+                            RateController.setRate(setVal)
+                            val raw = RateController.getCurrentRate()
+                            currentRate = READ_REVERSE[raw] ?: raw
                             debug = RateController.lastDebugEntries
                         }
                     },
@@ -138,7 +143,8 @@ fun MainScreen() {
             }, modifier = Modifier.weight(1f)) { Text("诊断") }
             FilledTonalButton(onClick = {
                 scope.launch(Dispatchers.IO) {
-                    currentRate = RateController.getCurrentRate()
+                    val raw = RateController.getCurrentRate()
+                    currentRate = READ_REVERSE[raw] ?: raw
                 }
             }, modifier = Modifier.weight(1f)) { Text("刷新状态") }
             FilledTonalButton(onClick = {
