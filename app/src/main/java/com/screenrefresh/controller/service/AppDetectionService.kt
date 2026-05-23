@@ -42,6 +42,7 @@ class AppDetectionService : AccessibilityService() {
         super.onServiceConnected()
         _isRunning.value = true
         startForeground(1, buildNotification("监控中"))
+        scope.launch { RateController.scanModes() }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
