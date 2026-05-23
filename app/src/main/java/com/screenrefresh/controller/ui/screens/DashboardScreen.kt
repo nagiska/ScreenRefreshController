@@ -77,49 +77,53 @@ fun DashboardScreen(
     var showDebug by remember { mutableStateOf(false) }
     var debug by remember { mutableStateOf<List<RootExecutor.DebugEntry>>(emptyList()) }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)
+        .padding(top = 20.dp, bottom = 40.dp)) {
+
+        Spacer(Modifier.height(8.dp))
 
         // ── Top row: Current rate box + Step indicators ──
-        Row(Modifier.fillMaxWidth().height(72.dp), verticalAlignment = Alignment.CenterVertically) {
-            // Left: current rate card (square-ish, tall)
+        Row(Modifier.fillMaxWidth().height(96.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Left: current rate card (bigger square)
             Card(
-                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier.width(130.dp).fillMaxHeight(),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MiuiCardBg),
                 elevation = CardDefaults.cardElevation(0.dp)
             ) {
-                Row(
-                    Modifier.padding(horizontal = 14.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Box(
-                        Modifier.size(22.dp).clip(RoundedCornerShape(11.dp)).background(MiuiGreen),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("✓", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier.size(24.dp).clip(RoundedCornerShape(12.dp)).background(MiuiGreen),
+                            contentAlignment = Alignment.Center
+                        ) { Text("✓", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+                        Spacer(Modifier.width(6.dp))
+                        Text("${curRate} Hz", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = MiuiText)
                     }
-                    Spacer(Modifier.width(8.dp))
-                    Column {
-                        Text("${curRate} Hz", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MiuiText)
-                        Text("当前刷新率", fontSize = 9.sp, color = MiuiGray)
-                    }
+                    Spacer(Modifier.height(2.dp))
+                    Text("当前刷新率", fontSize = 9.sp, color = MiuiGray)
                 }
             }
 
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(8.dp))
 
-            // Right: 5 horizontal bars stacked vertically
-            Column(Modifier.weight(1f).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            // Right: 5 bars stacked vertically
+            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 PROFILE_RATES.forEach { rate ->
                     val active = rate == curRate
                     Box(
                         Modifier.weight(1f).fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(12.dp))
                             .background(if (active) MiuiBlue else Color(0xFFEEEEEF)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            "${rate}Hz", fontSize = 11.sp,
-                            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                            "${rate}Hz", fontSize = 13.sp,
+                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
                             color = if (active) Color.White else MiuiGray
                         )
                     }
