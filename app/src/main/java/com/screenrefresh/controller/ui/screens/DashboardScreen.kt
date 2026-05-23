@@ -205,10 +205,9 @@ fun DashboardScreen(
             ) { Text(if (showDebug) "收起" else "日志", fontSize = 11.sp, color = MiuiText) }
         }
 
-        if (showDebug && debug.isNotEmpty()) {
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(12.dp))
 
-        // ── Service status ──
+        // ── Service status (always visible) ──
         Card(
             Modifier.fillMaxWidth().clickable { if (!isServiceRunning) onOpenAccessibility() },
             shape = RoundedCornerShape(14.dp),
@@ -218,13 +217,11 @@ fun DashboardScreen(
             elevation = CardDefaults.cardElevation(0.dp)
         ) {
             Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(if (isServiceRunning) "●" else "○",
-                    fontSize = 10.sp,
+                Text(if (isServiceRunning) "●" else "○", fontSize = 10.sp,
                     color = if (isServiceRunning) MiuiGreen else Color(0xFFFF4D4F))
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("无障碍服务",
-                        fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                    Text("无障碍服务", fontSize = 12.sp, fontWeight = FontWeight.Medium,
                         color = if (isServiceRunning) Color(0xFF2E7D32) else Color(0xFFC62828))
                     Text(if (isServiceRunning) "监控中" else "点击开启",
                         fontSize = 10.sp, color = MiuiGray)
@@ -232,9 +229,13 @@ fun DashboardScreen(
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        // ── Debug log (conditional) ──
+        if (showDebug && debug.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(0.dp)) {
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(0.dp)
+            ) {
                 Column(Modifier.fillMaxWidth().padding(10.dp)) {
                     debug.forEach { e ->
                         val icon = if (e.success) "✅" else "❌"
