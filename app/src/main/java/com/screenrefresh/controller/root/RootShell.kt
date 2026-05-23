@@ -4,6 +4,7 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
+import java.io.DataOutputStream
 import java.io.InputStreamReader
 
 object RootShell {
@@ -18,41 +19,49 @@ object RootShell {
         val error: String
     )
 
+    // Execute commands via persistent su shell (write to stdin)
+    private suspend fun suExec(script: String): ShellResult = withContext(Dispatchers.IO) {
+        try {
+            val process = Runtime.getRuntime().exec("su")
+            val stdin = DataOutputStream(process.outputStream)
+            val stdout = BufferedReader(InputStreamReader(process.inputStream))
+            val stderr = BufferedReader(InputStreamReader(process.errorStream))
+
+            stdin.writeBytes("$script\n")
+            stdin.writeBytes("echo __EXIT__$?\n")
+            stdin.writeBytes("exit\n")
+            stdin.flush()
+            stdin.close()
+
+            val output = stdout.readText().trim()
+            val error = stderr.readText().trim()
+            process.waitFor()
+
+            val exitMarker = output.substringAfterLast("__EXIT__").trim()
+            val exitCode = exitMarker.toIntOrNull() ?: -1
+            val cleanOutput = output.substringBeforeLast("__EXIT__").trim()
+
+            ShellResult(exitCode == 0, cleanOutput, error)
+        } catch (e: Exception) {
+            Log.e(TAG, "su exec failed: $script", e)
+            ShellResult(false, "", e.message ?: "error")
+        }
+    }
+
     suspend fun isRootAvailable(): Boolean = withContext(Dispatchers.IO) {
         try {
-            val methods = listOf(
-                arrayOf("which", "su"),
-                arrayOf("/system/xbin/su", "--version"),
-                arrayOf("/system/bin/su", "--version")
-            )
-            for (cmd in methods) {
-                val p = Runtime.getRuntime().exec(cmd)
-                val r = BufferedReader(InputStreamReader(p.inputStream))
-                val line = r.readLine()
-                p.waitFor()
-                if (!line.isNullOrBlank()) return@withContext true
-            }
-            false
+            val p = Runtime.getRuntime().exec(arrayOf("which", "su"))
+            val r = BufferedReader(InputStreamReader(p.inputStream))
+            val line = r.readLine()
+            p.waitFor()
+            !line.isNullOrBlank()
         } catch (e: Exception) {
             Log.e(TAG, "Root check failed", e)
             false
         }
     }
 
-    suspend fun executeCommand(command: String): ShellResult = withContext(Dispatchers.IO) {
-        try {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
-            val stdout = BufferedReader(InputStreamReader(process.inputStream))
-            val stderr = BufferedReader(InputStreamReader(process.errorStream))
-            val output = stdout.readText().trim()
-            val error = stderr.readText().trim()
-            val exitCode = process.waitFor()
-            ShellResult(exitCode == 0, output, error)
-        } catch (e: Exception) {
-            Log.e(TAG, "Command failed: $command", e)
-            ShellResult(false, "", e.message ?: "Unknown error")
-        }
-    }
+    suspend fun executeCommand(command: String): ShellResult = suExec(command)
 
     suspend fun executeCommandWithDebug(
         label: String,
@@ -60,19 +69,14 @@ object RootShell {
     ): ShellDebugEntry = withContext(Dispatchers.IO) {
         try {
             val startTime = System.currentTimeMillis()
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
-            val stdout = BufferedReader(InputStreamReader(process.inputStream))
-            val stderr = BufferedReader(InputStreamReader(process.errorStream))
-            val output = stdout.readText().trim()
-            val error = stderr.readText().trim()
-            val exitCode = process.waitFor()
+            val result = suExec(command)
             val elapsed = System.currentTimeMillis() - startTime
             ShellDebugEntry(
                 method = "$label (${elapsed}ms)",
                 command = command,
-                success = exitCode == 0,
-                output = output.ifEmpty { "(empty)" },
-                error = error.ifEmpty { "(none)" }
+                success = result.success,
+                output = result.output.ifEmpty { "(empty)" },
+                error = result.error.ifEmpty { "(none)" }
             )
         } catch (e: Exception) {
             ShellDebugEntry(

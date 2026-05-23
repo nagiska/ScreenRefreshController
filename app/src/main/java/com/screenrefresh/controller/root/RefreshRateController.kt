@@ -35,6 +35,9 @@ class RefreshRateController {
 
     private val defaultRate = MutableStateFlow(60)
 
+    // Initial state
+    private var initialDumpsysChecked = false
+
     suspend fun initDefaultRate() {
         val cmds = listOf(
             "settings get global user_refresh_rate",
@@ -42,7 +45,7 @@ class RefreshRateController {
             "settings get system peak_refresh_rate",
         )
         for (cmd in cmds) {
-            val result = RootShell.executeCommand("$cmd 2>/dev/null || true")
+            val result = RootShell.executeCommand("$cmd 2>/dev/null || echo 0")
             val rate = result.output.trim().toFloatOrNull()?.toInt()
             if (rate != null && rate > 0) {
                 defaultRate.value = rate
@@ -59,7 +62,9 @@ class RefreshRateController {
         if (modes.isNotEmpty()) {
             cachedModes = modes
             _availableModes.value = modes
-            Log.d(TAG, "Found ${modes.size} display modes from dumpsys")
+            Log.d(TAG, "Found ${modes.size} display modes: ${modes.map { it.fps }}")
+        } else {
+            Log.d(TAG, "No display modes found from dumpsys")
         }
     }
 
@@ -70,72 +75,95 @@ class RefreshRateController {
     suspend fun setRefreshRate(rate: Int): Boolean {
         Log.d(TAG, "=== setRefreshRate($rate) ===")
         val entries = mutableListOf<RootShell.ShellDebugEntry>()
-        var success = false
 
-        // Refresh display modes if cache is empty
-        if (cachedModes.isEmpty()) refreshDisplayModes()
+        // Refresh display modes if not yet checked
+        if (!initialDumpsysChecked) {
+            refreshDisplayModes()
+            initialDumpsysChecked = true
+        }
+
         val modeId = findModeIdForFps(rate)
         if (modeId != null) {
             Log.d(TAG, "Found modeId=$modeId for ${rate}Hz")
         } else {
-            Log.d(TAG, "No modeId found for ${rate}Hz, cached modes: ${cachedModes.map { it.fps }}")
+            Log.d(TAG, "No modeId for ${rate}Hz, cached fps: ${cachedModes.map { it.fps }}")
         }
 
-        // Phase 1: settings put (multiple keys for broad compatibility)
-        entries.add(RootShell.executeCommandWithDebug("put:global:peak",
-            "settings put global peak_refresh_rate $rate"))
-        entries.add(RootShell.executeCommandWithDebug("put:global:user",
-            "settings put global user_refresh_rate $rate"))
-        entries.add(RootShell.executeCommandWithDebug("put:system:min",
-            "settings put system min_refresh_rate $rate"))
-        entries.add(RootShell.executeCommandWithDebug("put:system:peak",
-            "settings put system peak_refresh_rate $rate"))
-        entries.add(RootShell.executeCommandWithDebug("put:system:user",
-            "settings put system user_refresh_rate $rate"))
+        // Build combined script: all commands in ONE su session (like the working APK)
+        val cmds = mutableListOf<String>()
+
+        // Settings keys
+        cmds.add("settings put global peak_refresh_rate $rate")
+        cmds.add("settings put global user_refresh_rate $rate")
+        cmds.add("settings put system min_refresh_rate $rate")
+        cmds.add("settings put system peak_refresh_rate $rate")
+        cmds.add("settings put system user_refresh_rate $rate")
+        cmds.add("settings put secure miui_refresh_rate $rate")
+
+        // SurfaceFlinger with modeId (if found)
+        if (modeId != null) {
+            cmds.add("service call SurfaceFlinger 1035 i32 $modeId")
+        } else {
+            cmds.add("service call SurfaceFlinger 1035 i32 $rate")
+        }
+
+        // sysfs fb0/fps
+        cmds.add("echo $rate > /sys/class/graphics/fb0/fps 2>/dev/null; echo \$?")
+        cmds.add("echo $rate > /sys/devices/virtual/graphics/fb0/fps 2>/dev/null; echo \$?")
+
+        // Verify
+        val verifyCmds = listOf(
+            "echo === verify ===",
+            "settings get global peak_refresh_rate",
+            "settings get system user_refresh_rate",
+            "cat /sys/class/graphics/fb0/fps 2>/dev/null || echo not_found",
+            "settings get secure miui_refresh_rate 2>/dev/null || echo not_found",
+        )
+
+        val fullScript = (cmds + verifyCmds).joinToString(" && ")
+        val entry = RootShell.executeCommandWithDebug("combined:all", fullScript)
+        entries.add(entry)
+
+        // Also try individual attempts for detailed debug
         entries.add(RootShell.executeCommandWithDebug("put:secure:miui",
             "settings put secure miui_refresh_rate $rate"))
+        entries.add(RootShell.executeCommandWithDebug("put:system:user",
+            "settings put system user_refresh_rate $rate"))
+        entries.add(RootShell.executeCommandWithDebug("put:system:peak",
+            "settings put system peak_refresh_rate $rate"))
+        entries.add(RootShell.executeCommandWithDebug("put:system:min",
+            "settings put system min_refresh_rate $rate"))
 
-        // Phase 2: SurfaceFlinger 1035 with modeId (most direct method from working APK)
         if (modeId != null) {
-            entries.add(RootShell.executeCommandWithDebug("sf:1035:mode",
+            entries.add(RootShell.executeCommandWithDebug("sf:1035:modeId",
                 "service call SurfaceFlinger 1035 i32 $modeId"))
         } else {
-            // Fallback: try with raw fps value
             entries.add(RootShell.executeCommandWithDebug("sf:1035:fps",
                 "service call SurfaceFlinger 1035 i32 $rate"))
         }
 
-        // Phase 3: sysfs fb0/fps (for DTBO-overclocked devices like Xiaomi)
         val fpsPaths = listOf(
             "/sys/class/graphics/fb0/fps",
             "/sys/devices/virtual/graphics/fb0/fps"
         )
         for (path in fpsPaths) {
-            val cmd = "echo $rate > $path && cat $path"
-            val entry = RootShell.executeCommandWithDebug("sysfs:fps", cmd)
-            entries.add(entry)
-            if (entry.success && entry.output.trim() == rate.toString()) {
-                success = true
-            }
+            entries.add(RootShell.executeCommandWithDebug("sysfs:fps",
+                "echo $rate > $path && cat $path"))
         }
 
-        // Verify: read back current rate
-        val verifyCmds = "settings get global peak_refresh_rate; " +
-            "settings get system user_refresh_rate; " +
-            "cat /sys/class/graphics/fb0/fps 2>/dev/null || true; " +
-            "settings get secure miui_refresh_rate 2>/dev/null || true"
-        val verifyEntry = RootShell.executeCommandWithDebug("verify:all", verifyCmds)
-        entries.add(verifyEntry)
+        // Check if any method succeeded
+        val anySuccess = entry.output.contains(rate.toString()) ||
+            entries.any { it.output.trim() == rate.toString() }
 
-        if (verifyEntry.output.contains(rate.toString()) || success) {
+        if (anySuccess) {
             _currentRate.value = rate
             _lastError.value = null
         } else {
-            _lastError.value = "All methods attempted for $rate Hz"
+            _lastError.value = "All methods failed for $rate Hz"
         }
 
         _debugLog.value = entries
-        return success
+        return anySuccess
     }
 
     suspend fun resetToDefault() {
@@ -146,7 +174,7 @@ class RefreshRateController {
     fun startStepping(
         scope: CoroutineScope,
         availableRates: List<Int>,
-        stepIntervalMs: Long = 3000L,
+        stepIntervalMs: Long = 2000L,
         onStep: (Int) -> Unit = {},
         onComplete: () -> Unit = {},
         onError: (String) -> Unit = {}
