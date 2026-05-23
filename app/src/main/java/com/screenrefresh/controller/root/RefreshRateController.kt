@@ -13,6 +13,22 @@ class RefreshRateController {
 
     companion object {
         private const val TAG = "RefreshRateController"
+        private val SAFE_KEYS = listOf(
+            // All non-sysfs keys tried in order
+            Triple("global", "peak_refresh_rate", false),
+            Triple("global", "user_refresh_rate", false),
+            Triple("system", "peak_refresh_rate", false),
+            Triple("system", "user_refresh_rate", false),
+            Triple("secure", "peak_refresh_rate", false),
+            Triple("secure", "user_refresh_rate", false),
+            Triple("global", "min_refresh_rate", false),
+            Triple("global", "max_refresh_rate", false),
+            Triple("global", "oneplus_screen_refresh_rate", false),
+            Triple("global", "miui_refresh_rate", false),
+            Triple("system", "min_refresh_rate", false),
+            Triple("system", "max_refresh_rate", false),
+        )
+        private val SF_METHODS = listOf(1035, 1002, 1036, 1037)
     }
 
     private var steppingJob: Job? = null
@@ -31,15 +47,18 @@ class RefreshRateController {
 
     private val defaultRate = MutableStateFlow(60)
 
+    // Which method succeeded - saved for reuse
+    private var preferredMethod: String? = null
+
     suspend fun initDefaultRate() {
-        val cmds = listOf(
+        val readCmds = listOf(
             "settings get global user_refresh_rate",
             "settings get global peak_refresh_rate",
             "settings get system peak_refresh_rate",
             "settings get global oneplus_screen_refresh_rate",
             "settings get global miui_refresh_rate"
         )
-        for (cmd in cmds) {
+        for (cmd in readCmds) {
             val result = RootShell.executeCommand("$cmd 2>/dev/null || true")
             val rate = result.output.trim().toFloatOrNull()?.toInt()
             if (rate != null && rate > 0) {
@@ -52,85 +71,86 @@ class RefreshRateController {
         _currentRate.value = 60
     }
 
-    suspend fun safeSetRefreshRate(rate: Int): Boolean {
-        Log.d(TAG, "Safely setting refresh rate to ${rate}Hz")
-
-        val results = listOf(
-            RootShell.executeCommand("settings put global peak_refresh_rate $rate"),
-            RootShell.executeCommand("settings put global user_refresh_rate $rate"),
-            RootShell.executeCommand("settings put system peak_refresh_rate $rate"),
-            RootShell.executeCommand("settings put system user_refresh_rate $rate")
-        )
-
-        val anyOk = results.any { it.success }
-        if (anyOk) {
-            _currentRate.value = rate
-            _lastError.value = null
-            Log.d(TAG, "Safe set succeeded for ${rate}Hz")
-            return true
-        }
-
-        _lastError.value = "settings put failed for $rate Hz"
-        return false
-    }
-
-    suspend fun debugTryAllMethods(rate: Int): List<RootShell.ShellDebugEntry> {
-        val entries = mutableListOf<RootShell.ShellDebugEntry>()
-        Log.d(TAG, "=== DEBUG: Trying all methods to set $rate Hz ===")
-
-        val safeCmds = listOf(
-            Triple("global", "peak_refresh_rate", "$rate"),
-            Triple("global", "user_refresh_rate", "$rate"),
-            Triple("global", "min_refresh_rate", "$rate"),
-            Triple("global", "max_refresh_rate", "$rate"),
-            Triple("global", "fps_constraint", "${rate}.0"),
-            Triple("global", "oneplus_screen_refresh_rate", "$rate"),
-            Triple("global", "miui_refresh_rate", "$rate"),
-            Triple("system", "peak_refresh_rate", "$rate"),
-            Triple("system", "user_refresh_rate", "$rate"),
-            Triple("system", "min_refresh_rate", "$rate"),
-            Triple("system", "max_refresh_rate", "$rate"),
-            Triple("system", "fps_constraint", "${rate}.0"),
-            Triple("secure", "peak_refresh_rate", "$rate"),
-            Triple("secure", "user_refresh_rate", "$rate"),
-        )
-        for ((scope, key, value) in safeCmds) {
-            entries.add(RootShell.executeCommandWithDebug("settings $scope $key",
-                "settings put $scope $key $value"))
-        }
-
-        val sysfsPaths = listOf(
-            "/sys/class/graphics/fb0/fps",
-            "/sys/devices/virtual/graphics/fb0/fps",
-            "/sys/class/drm/card0-DSI-1/status",
-            "/sys/devices/platform/display/fps",
-            "/proc/graphics/fps"
-        )
-        for (path in sysfsPaths) {
-            entries.add(RootShell.executeCommandWithDebug("sysfs $path",
-                "echo $rate > $path 2>/dev/null && cat $path 2>/dev/null || echo 'FAIL'"))
-        }
-
-        val readCmds = listOf(
-            "settings get global peak_refresh_rate",
+    private suspend fun getCurrentSettingRate(): Int {
+        val cmds = listOf(
             "settings get global user_refresh_rate",
-            "dumpsys display | grep -iE 'refreshRate|modeId' | head -5"
+            "settings get global peak_refresh_rate",
+            "settings get system peak_refresh_rate"
         )
-        for (cmd in readCmds) {
-            entries.add(RootShell.executeCommandWithDebug("readback", cmd))
+        for (cmd in cmds) {
+            val r = RootShell.executeCommand("$cmd 2>/dev/null || true")
+            val rate = r.output.trim().toFloatOrNull()?.toInt()
+            if (rate != null && rate > 0) return rate
         }
-
-        _debugLog.value = entries
-        return entries
+        return 0
     }
 
     suspend fun setRefreshRate(rate: Int): Boolean {
-        return safeSetRefreshRate(rate)
+        Log.d(TAG, "Setting refresh rate to ${rate}Hz")
+        val entries = mutableListOf<RootShell.ShellDebugEntry>()
+
+        // 1. Try preferred method first (if we found one before)
+        if (preferredMethod != null) {
+            val parts = preferredMethod!!.split("|")
+            if (parts.size == 2) {
+                val cmd = parts[1].replace("{rate}", rate.toString())
+                val entry = RootShell.executeCommandWithDebug("preferred", cmd)
+                entries.add(entry)
+                if (entry.success) {
+                    val actual = getCurrentSettingRate()
+                    if (actual == rate) {
+                        _currentRate.value = rate
+                        _lastError.value = null
+                        _debugLog.value = entries
+                        return true
+                    }
+                }
+            }
+        }
+
+        // 2. Try all settings keys
+        for ((scope, key, _) in SAFE_KEYS) {
+            val cmd = "settings put $scope $key $rate"
+            val entry = RootShell.executeCommandWithDebug("$scope.$key", cmd)
+            entries.add(entry)
+        }
+
+        val actualAfterSettings = getCurrentSettingRate()
+        if (actualAfterSettings == rate) {
+            _currentRate.value = rate
+            _lastError.value = null
+            _debugLog.value = entries
+            return true
+        }
+
+        // 3. Try SurfaceFlinger service calls
+        for (code in SF_METHODS) {
+            val cmd = "service call SurfaceFlinger $code i32 $rate"
+            val entry = RootShell.executeCommandWithDebug("sf::$code", cmd)
+            entries.add(entry)
+        }
+
+        val actualAfterSf = getCurrentSettingRate()
+        if (actualAfterSf == rate) {
+            _currentRate.value = rate
+            _lastError.value = null
+            preferredMethod = "sf|service call SurfaceFlinger 1035 i32 {rate}"
+            _debugLog.value = entries
+            return true
+        }
+
+        // 4. Read back final state
+        entries.add(RootShell.executeCommandWithDebug("read_final",
+            "settings get global peak_refresh_rate && settings get global user_refresh_rate && dumpsys display | grep -i refreshRate | head -3"))
+
+        _lastError.value = "Tried all methods, rate stayed at $actualAfterSf"
+        _debugLog.value = entries
+        return false
     }
 
     suspend fun resetToDefault() {
         val def = defaultRate.value
-        if (def > 0) safeSetRefreshRate(def)
+        if (def > 0) setRefreshRate(def)
     }
 
     fun startStepping(
@@ -154,7 +174,7 @@ class RefreshRateController {
                 if (!isActive) break
                 if (rate <= startRate) continue
 
-                val success = safeSetRefreshRate(rate)
+                val success = setRefreshRate(rate)
                 if (!success) {
                     val err = "Failed to set $rate Hz"
                     _lastError.value = err
@@ -170,9 +190,9 @@ class RefreshRateController {
         }
     }
 
-    fun clearDebugLog() {
-        _debugLog.value = emptyList()
-    }
+    fun clearPreferredMethod() { preferredMethod = null }
+
+    fun clearDebugLog() { _debugLog.value = emptyList() }
 
     fun stopStepping() {
         steppingJob?.cancel()
