@@ -61,6 +61,7 @@ fun MainContent() {
     LaunchedEffect(Unit) {
         currentRate = RateController.getCurrentRate()
         kernelVer = RateController.getKernelVersion()
+        RateController.scanModes()
     }
 
     Scaffold(
