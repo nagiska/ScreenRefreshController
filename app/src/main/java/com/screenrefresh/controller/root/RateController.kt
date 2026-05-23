@@ -10,8 +10,15 @@ object RateController {
     var lastDebugEntries: List<RootExecutor.DebugEntry> = emptyList()
         private set
 
-    // Cache: fps → modeId from dumpsys
     private var modeMap: Map<Int, Int> = emptyMap()
+
+    // DTBO overclock mapping: display Hz → actual setting value needed
+    private val displayToSetting = mapOf(
+        120 to 120, 132 to 144, 144 to 156, 156 to 165, 165 to 165
+    )
+    private val settingToDisplay = mapOf(
+        120 to 120, 144 to 132, 156 to 144, 165 to 156
+    )
 
     suspend fun refreshModeMap() = withContext(Dispatchers.IO) {
         // Get full dumpsys, grep for mode records
@@ -34,11 +41,13 @@ object RateController {
 
     suspend fun getCurrentRate(): Int = withContext(Dispatchers.IO) {
         val r = RootExecutor.execute("settings get secure miui_refresh_rate 2>/dev/null || echo 0")
-        r.output.trim().toFloatOrNull()?.toInt()?.takeIf { it in 30..300 } ?: 120
+        val raw = r.output.trim().toFloatOrNull()?.toInt()?.takeIf { it in 30..300 } ?: 120
+        settingToDisplay[raw] ?: raw
     }
 
-    suspend fun setRate(rate: Int): Boolean = withContext(Dispatchers.IO) {
-        Log.d(TAG, "=== setRate($rate) ===")
+    suspend fun setRate(displayRate: Int): Boolean = withContext(Dispatchers.IO) {
+        val rate = displayToSetting[displayRate] ?: displayRate
+        Log.d(TAG, "=== setRate(display=${displayRate} → setting=${rate}) ===")
         val entries = mutableListOf<RootExecutor.DebugEntry>()
 
         // Refresh mode map if empty
