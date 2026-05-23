@@ -16,6 +16,7 @@ class RefreshRateController {
     }
 
     private var steppingJob: Job? = null
+    private var cachedModes: List<DisplayModeInfo> = emptyList()
 
     private val _currentRate = MutableStateFlow(60)
     val currentRate: StateFlow<Int> = _currentRate
@@ -28,6 +29,9 @@ class RefreshRateController {
 
     private val _debugLog = MutableStateFlow<List<RootShell.ShellDebugEntry>>(emptyList())
     val debugLog: StateFlow<List<RootShell.ShellDebugEntry>> = _debugLog
+
+    private val _availableModes = MutableStateFlow<List<DisplayModeInfo>>(emptyList())
+    val availableModes: StateFlow<List<DisplayModeInfo>> = _availableModes
 
     private val defaultRate = MutableStateFlow(60)
 
@@ -50,22 +54,58 @@ class RefreshRateController {
         _currentRate.value = 60
     }
 
+    suspend fun refreshDisplayModes() {
+        val modes = DeviceConfig.scanDisplayModesFromDumpsys()
+        if (modes.isNotEmpty()) {
+            cachedModes = modes
+            _availableModes.value = modes
+            Log.d(TAG, "Found ${modes.size} display modes from dumpsys")
+        }
+    }
+
+    private fun findModeIdForFps(targetFps: Int): Int? {
+        return cachedModes.firstOrNull { it.fps == targetFps }?.id
+    }
+
     suspend fun setRefreshRate(rate: Int): Boolean {
         Log.d(TAG, "=== setRefreshRate($rate) ===")
         val entries = mutableListOf<RootShell.ShellDebugEntry>()
         var success = false
 
-        // Phase 1: settings put (safe, works on most devices)
+        // Refresh display modes if cache is empty
+        if (cachedModes.isEmpty()) refreshDisplayModes()
+        val modeId = findModeIdForFps(rate)
+        if (modeId != null) {
+            Log.d(TAG, "Found modeId=$modeId for ${rate}Hz")
+        } else {
+            Log.d(TAG, "No modeId found for ${rate}Hz, cached modes: ${cachedModes.map { it.fps }}")
+        }
+
+        // Phase 1: settings put (multiple keys for broad compatibility)
         entries.add(RootShell.executeCommandWithDebug("put:global:peak",
             "settings put global peak_refresh_rate $rate"))
         entries.add(RootShell.executeCommandWithDebug("put:global:user",
             "settings put global user_refresh_rate $rate"))
+        entries.add(RootShell.executeCommandWithDebug("put:system:min",
+            "settings put system min_refresh_rate $rate"))
         entries.add(RootShell.executeCommandWithDebug("put:system:peak",
             "settings put system peak_refresh_rate $rate"))
         entries.add(RootShell.executeCommandWithDebug("put:system:user",
             "settings put system user_refresh_rate $rate"))
+        entries.add(RootShell.executeCommandWithDebug("put:secure:miui",
+            "settings put secure miui_refresh_rate $rate"))
 
-        // Phase 2: sysfs fb0/fps (for DTBO-overclocked devices like Xiaomi)
+        // Phase 2: SurfaceFlinger 1035 with modeId (most direct method from working APK)
+        if (modeId != null) {
+            entries.add(RootShell.executeCommandWithDebug("sf:1035:mode",
+                "service call SurfaceFlinger 1035 i32 $modeId"))
+        } else {
+            // Fallback: try with raw fps value
+            entries.add(RootShell.executeCommandWithDebug("sf:1035:fps",
+                "service call SurfaceFlinger 1035 i32 $rate"))
+        }
+
+        // Phase 3: sysfs fb0/fps (for DTBO-overclocked devices like Xiaomi)
         val fpsPaths = listOf(
             "/sys/class/graphics/fb0/fps",
             "/sys/devices/virtual/graphics/fb0/fps"
@@ -79,17 +119,15 @@ class RefreshRateController {
             }
         }
 
-        // Phase 3: SurfaceFlinger service calls
-        entries.add(RootShell.executeCommandWithDebug("sf:1035",
-            "service call SurfaceFlinger 1035 i32 $rate"))
-
         // Verify: read back current rate
-        val verifyEntry = RootShell.executeCommandWithDebug("verify",
-            "settings get global peak_refresh_rate && " +
-            "cat /sys/class/graphics/fb0/fps 2>/dev/null || true")
+        val verifyCmds = "settings get global peak_refresh_rate; " +
+            "settings get system user_refresh_rate; " +
+            "cat /sys/class/graphics/fb0/fps 2>/dev/null || true; " +
+            "settings get secure miui_refresh_rate 2>/dev/null || true"
+        val verifyEntry = RootShell.executeCommandWithDebug("verify:all", verifyCmds)
         entries.add(verifyEntry)
 
-        if (success) {
+        if (verifyEntry.output.contains(rate.toString()) || success) {
             _currentRate.value = rate
             _lastError.value = null
         } else {
@@ -145,6 +183,5 @@ class RefreshRateController {
     fun stopStepping() {
         steppingJob?.cancel()
         steppingJob = null
-        _isStepping.value = false
     }
 }
