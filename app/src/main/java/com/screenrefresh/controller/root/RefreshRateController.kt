@@ -136,7 +136,8 @@ class RefreshRateController {
         cmds.add("cat /sys/class/graphics/fb0/fps 2>/dev/null || echo no_fb0")
 
         val fullScript = cmds.joinToString(" && ")
-        entries.add(RootShell.executeCommandWithDebug("combined:all", fullScript))
+        val combinedEntry = RootShell.executeCommandWithDebug("combined:all", fullScript)
+        entries.add(combinedEntry)
 
         // Phase 4: Shizuku (shell UID) - try same commands via Shizuku
         if (ShizukuShell.isAvailable()) {
@@ -199,7 +200,7 @@ class RefreshRateController {
         }
 
         // Check success
-        val anySuccess = entry.output.contains(rate.toString()) ||
+        val anySuccess = combinedEntry.output.contains(rate.toString()) ||
             entries.any { it.output.contains(rate.toString()) && it.success }
 
         if (anySuccess) {
