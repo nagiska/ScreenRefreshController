@@ -64,11 +64,9 @@ object RateController {
         entries.add(RootExecutor.executeWithDebug("glb-min", "settings put global min_refresh_rate $rate"))
         entries.add(RootExecutor.executeWithDebug("glb-max", "settings put global max_refresh_rate $rate"))
 
-        // Step 5: SurfaceFlinger with modeId (displayId=0 first!)
+        // Step 5: SurfaceFlinger with modeId
         if (modeId != null) {
-            entries.add(RootExecutor.executeWithDebug("sf-modeId", "service call SurfaceFlinger 1035 i32 0 i32 $modeId"))
-        } else {
-            entries.add(RootExecutor.executeWithDebug("sf-raw", "service call SurfaceFlinger 1035 i32 0 i32 $rate"))
+            entries.add(RootExecutor.executeWithDebug("sf-modeId", "service call SurfaceFlinger 1035 i32 $modeId"))
         }
 
         // Verify

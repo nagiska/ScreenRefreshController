@@ -109,13 +109,16 @@ fun WhitelistScreen() {
     }
 
     if (deleteTarget != null) {
+        val target = deleteTarget!!
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
             title = { Text("移除") },
-            text = { Text("确定从白名单移除 ${deleteTarget!!.appName}？") },
+            text = { Text("确定从白名单移除 ${target.appName}？") },
             confirmButton = {
                 TextButton(onClick = {
-                    scope.launch(Dispatchers.IO) { db.whitelistDao().delete(deleteTarget!!) }
+                    scope.launch(Dispatchers.IO) {
+                        db.whitelistDao().delete(target)
+                    }
                     deleteTarget = null
                 }) { Text("确定", color = Color(0xFFFF4D4F)) }
             },
