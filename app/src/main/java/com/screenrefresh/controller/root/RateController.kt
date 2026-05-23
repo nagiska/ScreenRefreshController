@@ -16,24 +16,24 @@ object RateController {
     /** Scan dumpsys for modeId→Hz mapping. Xiaomi format: "modeId N renderFrameRate X.Y" */
     suspend fun scanAllModes() = withContext(Dispatchers.IO) {
         val entries = mutableListOf<RootExecutor.DebugEntry>()
-        // Get raw dumpsys output, search for modeId lines
-        val r = RootExecutor.execute("dumpsys display 2>/dev/null | grep -E 'modeId|fps=|DisplayModeRecord'")
-        entries.add(RootExecutor.executeWithDebug("dumpsys-raw", r.output.ifBlank { "(empty)" }))
+        val raw = RootExecutor.execute("dumpsys display 2>/dev/null | grep -E 'modeId|DisplayModeRecord|renderFrameRate|supportedModes'")
+        entries.add(RootExecutor.executeWithDebug("dumpsys-filtered", raw.output.ifBlank { "(empty)" }))
 
         val map = mutableMapOf<Int, Int>()
-        // Pattern 1: "modeId N renderFrameRate X.Y" (Xiaomi/HyperOS)
+        // Xiaomi/HyperOS: "modeId N ... renderFrameRate X.Y"
         val pat1 = Regex("""modeId\s+(\d+).*renderFrameRate\s+([\d.]+)""")
-        r.output.lines().forEach { line ->
+        // AOSP: "id=N, width=W, height=H, fps=X.Y"  
+        val pat2 = Regex("""id=(\d+),\s*width=(\d+),\s*height=(\d+),\s*fps=([\d.]+)""")
+
+        raw.output.lines().forEach { line ->
             pat1.find(line)?.let { m ->
                 val id = m.groupValues[1].toIntOrNull() ?: return@forEach
                 val hz = m.groupValues[2].toFloatOrNull()?.toInt() ?: return@forEach
                 if (hz in 30..300) map[hz] = id
             }
         }
-        // Pattern 2: "id=N, width=W, height=H, fps=X.Y" (AOSP)
         if (map.isEmpty()) {
-            val pat2 = Regex("""id=(\d+),\s*width=(\d+),\s*height=(\d+),\s*fps=([\d.]+)""")
-            r.output.lines().forEach { line ->
+            raw.output.lines().forEach { line ->
                 pat2.find(line)?.let { m ->
                     val id = m.groupValues[1].toIntOrNull() ?: return@forEach
                     val hz = m.groupValues[4].toFloatOrNull()?.toInt() ?: return@forEach
@@ -41,14 +41,8 @@ object RateController {
                 }
             }
         }
-
-        if (map.isNotEmpty()) {
-            hzToModeId = map
-            entries.add(RootExecutor.executeWithDebug("mode-ok", "mapping=$map"))
-        } else {
-            entries.add(RootExecutor.executeWithDebug("mode-fail",
-                "no modes found — check dumpsys-raw above"))
-        }
+        if (map.isNotEmpty()) { hzToModeId = map; entries.add(RootExecutor.executeWithDebug("mode-ok", "map=$map")) }
+        else entries.add(RootExecutor.executeWithDebug("mode-fail", "pattern mismatch"))
         lastDebugEntries = entries
     }
 
@@ -96,13 +90,10 @@ object RateController {
 
     suspend fun runDiagnostic() {
         val entries = mutableListOf<RootExecutor.DebugEntry>()
-        entries.add(RootExecutor.executeWithDebug("whoami", "id"))
-        entries.add(RootExecutor.executeWithDebug("dumpsys-full",
-            "dumpsys display 2>/dev/null"))
-        entries.add(RootExecutor.executeWithDebug("cur-miui",
-            "settings get secure miui_refresh_rate"))
-        entries.add(RootExecutor.executeWithDebug("mode-map",
-            "echo $hzToModeId"))
+        entries.add(RootExecutor.executeWithDebug("cur-miui", "settings get secure miui_refresh_rate"))
+        entries.add(RootExecutor.executeWithDebug("dumpsys-modes",
+            "dumpsys display 2>/dev/null | grep -E 'modeId|DisplayModeRecord|renderFrameRate'"))
+        entries.add(RootExecutor.executeWithDebug("mode-map", "echo $hzToModeId"))
         lastDebugEntries = entries
     }
 
