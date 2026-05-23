@@ -72,7 +72,9 @@ val MiuiLightScheme = lightColorScheme(
 @Composable
 fun DashboardScreen(
     currentRate: Int,
-    kernelVersion: String
+    kernelVersion: String,
+    isServiceRunning: Boolean = false,
+    onOpenAccessibility: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     var curRate by remember { mutableIntStateOf(currentRate) }
@@ -204,7 +206,33 @@ fun DashboardScreen(
         }
 
         if (showDebug && debug.isNotEmpty()) {
-            Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(8.dp))
+
+        // ── Service status ──
+        Card(
+            Modifier.fillMaxWidth().clickable { if (!isServiceRunning) onOpenAccessibility() },
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isServiceRunning) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
+            ),
+            elevation = CardDefaults.cardElevation(0.dp)
+        ) {
+            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (isServiceRunning) "●" else "○",
+                    fontSize = 10.sp,
+                    color = if (isServiceRunning) MiuiGreen else Color(0xFFFF4D4F))
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("无障碍服务",
+                        fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                        color = if (isServiceRunning) Color(0xFF2E7D32) else Color(0xFFC62828))
+                    Text(if (isServiceRunning) "监控中" else "点击开启",
+                        fontSize = 10.sp, color = MiuiGray)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(0.dp)) {
                 Column(Modifier.fillMaxWidth().padding(10.dp)) {
