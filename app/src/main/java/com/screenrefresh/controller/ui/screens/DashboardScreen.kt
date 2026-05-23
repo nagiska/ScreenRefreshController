@@ -57,30 +57,9 @@ fun DashboardScreen(
             .verticalScroll(scrollState),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Current rate card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("当前刷新率", style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(4.dp))
-                Text("${currentRate} Hz", fontSize = 48.sp, fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary)
-                if (isStepping) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(6.dp))
-                        Text("步进中...", style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.tertiary)
-                    }
+        Spacer(modifier = Modifier.height(32.dp))
+    }
+}
                 }
             }
         }
