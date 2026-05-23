@@ -38,6 +38,12 @@ object RateController {
         entries.add(RootExecutor.executeWithDebug("g-mi", "settings put global min_refresh_rate $targetHz"))
         entries.add(RootExecutor.executeWithDebug("g-mx", "settings put global max_refresh_rate $targetHz"))
 
+        // 5. SurfaceFlinger: try multiple guessed modeIds (reference APK approach)
+        for (id in 3..8) {
+            entries.add(RootExecutor.executeWithDebug("sf-$id",
+                "service call SurfaceFlinger 1035 i32 $id"))
+        }
+
         entries.add(RootExecutor.executeWithDebug("verify", "settings get secure miui_refresh_rate"))
         val ok = entries.any { it.success }
         lastDebugEntries = entries
@@ -47,6 +53,8 @@ object RateController {
     suspend fun runDiagnostic() {
         val entries = mutableListOf<RootExecutor.DebugEntry>()
         entries.add(RootExecutor.executeWithDebug("cur", "settings get secure miui_refresh_rate"))
+        entries.add(RootExecutor.executeWithDebug("all-modeIds",
+            "dumpsys display 2>/dev/null | grep -oE 'modeId [0-9]+|id=[0-9]+' | sort -nu"))
         lastDebugEntries = entries
     }
 
