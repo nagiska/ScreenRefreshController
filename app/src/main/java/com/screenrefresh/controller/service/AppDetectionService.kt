@@ -62,18 +62,14 @@ class AppDetectionService : AccessibilityService() {
             ))
             com.screenrefresh.controller.root.RateController.lastDebugEntries = entries
             if (entity != null) {
-                buildNotification("${entity.appName} → ${entity.targetRate}Hz")?.let {
-                    val nm = getSystemService(android.app.NotificationManager::class.java)
-                    nm?.notify(1, it)
-                }
+                val nm = getSystemService(android.app.NotificationManager::class.java)
+                nm?.notify(1, buildNotification("${entity.appName} → ${entity.targetRate}Hz"))
                 startStepping(entity.targetRate)
             } else {
                 stopStepping()
                 RateController.resetTo120()
-                buildNotification("监控中")?.let {
-                    val nm = getSystemService(android.app.NotificationManager::class.java)
-                    nm?.notify(1, it)
-                }
+                val nm = getSystemService(android.app.NotificationManager::class.java)
+                nm?.notify(1, buildNotification("监控中"))
             }
         }
     }
