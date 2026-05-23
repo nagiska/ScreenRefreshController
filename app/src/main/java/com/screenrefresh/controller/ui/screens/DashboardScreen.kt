@@ -45,7 +45,8 @@ fun DashboardScreen(
     debugEntries: List<RootShell.ShellDebugEntry>,
     onToggleService: () -> Unit,
     onManualSetRate: (Int) -> Unit,
-    onClearDebug: () -> Unit
+    onClearDebug: () -> Unit,
+    onRunDiagnostic: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
 
@@ -124,12 +125,7 @@ fun DashboardScreen(
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
                 elevation = CardDefaults.cardElevation(1.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("调试日志", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        FilledTonalButton(onClick = onClearDebug, modifier = Modifier.height(28.dp)) {
-                            Text("清空", fontSize = 11.sp)
-                        }
-                    }
+                    Text("调试日志", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(6.dp))
                     debugEntries.forEach { entry ->
                         val icon = if (entry.success) "✅" else "❌"
@@ -152,7 +148,19 @@ fun DashboardScreen(
             }
         }
 
-        // Bottom button
+        // Diagnostic
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilledTonalButton(
+                onClick = onRunDiagnostic,
+                modifier = Modifier.weight(1f).height(40.dp)
+            ) { Text("诊断系统", fontSize = 12.sp) }
+            FilledTonalButton(
+                onClick = onClearDebug,
+                modifier = Modifier.weight(1f).height(40.dp)
+            ) { Text("清空日志", fontSize = 12.sp) }
+        }
+
         Spacer(Modifier.height(12.dp))
         Button(
             onClick = onToggleService,

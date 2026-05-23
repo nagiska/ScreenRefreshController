@@ -13,6 +13,8 @@ class RefreshRateController {
 
     companion object {
         private const val TAG = "RefreshRateController"
+        // Multiple SurfaceFlinger transaction codes to try
+        private val SF_CODES = listOf(1035, 1013, 1004, 1010, 1005)
     }
 
     private var steppingJob: Job? = null
@@ -33,9 +35,10 @@ class RefreshRateController {
     private val _availableModes = MutableStateFlow<List<DisplayModeInfo>>(emptyList())
     val availableModes: StateFlow<List<DisplayModeInfo>> = _availableModes
 
-    private val defaultRate = MutableStateFlow(60)
+    private val _dumpOutput = MutableStateFlow<String?>(null)
+    val dumpOutput: StateFlow<String?> = _dumpOutput
 
-    // Initial state
+    private val defaultRate = MutableStateFlow(60)
     private var initialDumpsysChecked = false
 
     suspend fun initDefaultRate() {
@@ -57,6 +60,26 @@ class RefreshRateController {
         _currentRate.value = 60
     }
 
+    suspend fun runDiagnostic() {
+        val script = buildString {
+            appendLine("id")
+            appendLine("echo ---SU_OK---")
+            appendLine("which su")
+            appendLine("echo ---WHICH_SU---")
+            appendLine("dumpsys display 2>/dev/null | head -200")
+            appendLine("echo ---DUMPSYS_END---")
+            appendLine("cat /sys/class/graphics/fb0/fps 2>/dev/null || echo no_fb0_fps")
+            appendLine("echo ---SYSFS_FPS---")
+            appendLine("settings list global | grep -i refresh 2>/dev/null || echo no_global_refresh")
+            appendLine("echo ---GLOBAL_REFRESH---")
+            appendLine("settings list system | grep -i refresh 2>/dev/null || echo no_system_refresh")
+            appendLine("echo ---SYSTEM_REFRESH---")
+            appendLine("settings list secure | grep -i refresh 2>/dev/null || echo no_secure_refresh")
+        }
+        val entry = RootShell.executeCommandWithDebug("diagnostic", script.trimEnd())
+        _debugLog.value = listOf(entry)
+    }
+
     suspend fun refreshDisplayModes() {
         val modes = DeviceConfig.scanDisplayModesFromDumpsys()
         if (modes.isNotEmpty()) {
@@ -76,23 +99,15 @@ class RefreshRateController {
         Log.d(TAG, "=== setRefreshRate($rate) ===")
         val entries = mutableListOf<RootShell.ShellDebugEntry>()
 
-        // Refresh display modes if not yet checked
         if (!initialDumpsysChecked) {
             refreshDisplayModes()
             initialDumpsysChecked = true
         }
 
         val modeId = findModeIdForFps(rate)
-        if (modeId != null) {
-            Log.d(TAG, "Found modeId=$modeId for ${rate}Hz")
-        } else {
-            Log.d(TAG, "No modeId for ${rate}Hz, cached fps: ${cachedModes.map { it.fps }}")
-        }
 
-        // Build combined script: all commands in ONE su session (like the working APK)
+        // Phase 1: Combined settings + SF commands
         val cmds = mutableListOf<String>()
-
-        // Settings keys
         cmds.add("settings put global peak_refresh_rate $rate")
         cmds.add("settings put global user_refresh_rate $rate")
         cmds.add("settings put system min_refresh_rate $rate")
@@ -100,60 +115,92 @@ class RefreshRateController {
         cmds.add("settings put system user_refresh_rate $rate")
         cmds.add("settings put secure miui_refresh_rate $rate")
 
-        // SurfaceFlinger with modeId (if found)
+        // Phase 2: Try SurfaceFlinger with modeId first, then raw fps
         if (modeId != null) {
-            cmds.add("service call SurfaceFlinger 1035 i32 $modeId")
-        } else {
-            cmds.add("service call SurfaceFlinger 1035 i32 $rate")
+            for (code in SF_CODES) {
+                cmds.add("service call SurfaceFlinger $code i32 $modeId")
+            }
+        }
+        for (code in SF_CODES) {
+            cmds.add("service call SurfaceFlinger $code i32 $rate")
         }
 
-        // sysfs fb0/fps
-        cmds.add("echo $rate > /sys/class/graphics/fb0/fps 2>/dev/null; echo \$?")
-        cmds.add("echo $rate > /sys/devices/virtual/graphics/fb0/fps 2>/dev/null; echo \$?")
+        // Phase 3: sysfs
+        cmds.add("echo $rate > /sys/class/graphics/fb0/fps 2>/dev/null; echo fb0:\$?")
+        cmds.add("echo $rate > /sys/devices/virtual/graphics/fb0/fps 2>/dev/null; echo fb0_virt:\$?")
 
         // Verify
-        val verifyCmds = listOf(
-            "echo === verify ===",
-            "settings get global peak_refresh_rate",
-            "settings get system user_refresh_rate",
-            "cat /sys/class/graphics/fb0/fps 2>/dev/null || echo not_found",
-            "settings get secure miui_refresh_rate 2>/dev/null || echo not_found",
-        )
+        cmds.add("echo === verify ===")
+        cmds.add("settings get global peak_refresh_rate")
+        cmds.add("settings get system user_refresh_rate")
+        cmds.add("cat /sys/class/graphics/fb0/fps 2>/dev/null || echo no_fb0")
 
-        val fullScript = (cmds + verifyCmds).joinToString(" && ")
-        val entry = RootShell.executeCommandWithDebug("combined:all", fullScript)
-        entries.add(entry)
+        val fullScript = cmds.joinToString(" && ")
+        entries.add(RootShell.executeCommandWithDebug("combined:all", fullScript))
 
-        // Also try individual attempts for detailed debug
+        // Phase 4: Shizuku (shell UID) - try same commands via Shizuku
+        if (ShizukuShell.isAvailable()) {
+            for (code in SF_CODES) {
+                val target = modeId ?: rate
+                val cmd = "service call SurfaceFlinger $code i32 $target"
+                val result = ShizukuShell.executeCommand(cmd)
+                entries.add(RootShell.ShellDebugEntry(
+                    method = "shizuku:sf:$code",
+                    command = cmd,
+                    success = result.success,
+                    output = result.output.ifEmpty { "(empty)" },
+                    error = result.error.ifEmpty { "(none)" }
+                ))
+            }
+            // Also try settings via Shizuku
+            for (key in listOf("system min_refresh_rate", "system peak_refresh_rate",
+                               "system user_refresh_rate", "secure miui_refresh_rate",
+                               "global peak_refresh_rate", "global user_refresh_rate")) {
+                val cmd = "settings put $key $rate"
+                val result = ShizukuShell.executeCommand(cmd)
+                entries.add(RootShell.ShellDebugEntry(
+                    method = "shizuku:put:$key",
+                    command = cmd,
+                    success = result.success,
+                    output = result.output.ifEmpty { "(empty)" },
+                    error = result.error.ifEmpty { "(none)" }
+                ))
+            }
+        } else {
+            entries.add(RootShell.ShellDebugEntry(
+                method = "shizuku",
+                command = "Shizuku not available",
+                success = false,
+                output = "(skipped)",
+                error = "Install Shizuku from GitHub"
+            ))
+        }
+
+        // Phase 5: Individual attempts (for detailed debug)
         entries.add(RootShell.executeCommandWithDebug("put:secure:miui",
             "settings put secure miui_refresh_rate $rate"))
         entries.add(RootShell.executeCommandWithDebug("put:system:user",
             "settings put system user_refresh_rate $rate"))
         entries.add(RootShell.executeCommandWithDebug("put:system:peak",
             "settings put system peak_refresh_rate $rate"))
-        entries.add(RootShell.executeCommandWithDebug("put:system:min",
-            "settings put system min_refresh_rate $rate"))
 
         if (modeId != null) {
             entries.add(RootShell.executeCommandWithDebug("sf:1035:modeId",
                 "service call SurfaceFlinger 1035 i32 $modeId"))
-        } else {
-            entries.add(RootShell.executeCommandWithDebug("sf:1035:fps",
-                "service call SurfaceFlinger 1035 i32 $rate"))
+        }
+        for (code in SF_CODES) {
+            entries.add(RootShell.executeCommandWithDebug("sf:$code:fps",
+                "service call SurfaceFlinger $code i32 $rate"))
         }
 
-        val fpsPaths = listOf(
-            "/sys/class/graphics/fb0/fps",
-            "/sys/devices/virtual/graphics/fb0/fps"
-        )
-        for (path in fpsPaths) {
-            entries.add(RootShell.executeCommandWithDebug("sysfs:fps",
+        for (path in listOf("/sys/class/graphics/fb0/fps", "/sys/devices/virtual/graphics/fb0/fps")) {
+            entries.add(RootShell.executeCommandWithDebug("sysfs",
                 "echo $rate > $path && cat $path"))
         }
 
-        // Check if any method succeeded
+        // Check success
         val anySuccess = entry.output.contains(rate.toString()) ||
-            entries.any { it.output.trim() == rate.toString() }
+            entries.any { it.output.contains(rate.toString()) && it.success }
 
         if (anySuccess) {
             _currentRate.value = rate

@@ -60,6 +60,7 @@ class MainActivity : ComponentActivity() {
 
         scope.launch {
             refreshController.initDefaultRate()
+            refreshController.refreshDisplayModes()
         }
     }
 
@@ -150,7 +151,12 @@ private fun MainContent(
                             refreshController.setRefreshRate(rate)
                         }
                     },
-                    onClearDebug = { refreshController.clearDebugLog() }
+                    onClearDebug = { refreshController.clearDebugLog() },
+                    onRunDiagnostic = {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            refreshController.runDiagnostic()
+                        }
+                    }
                 )
                 1 -> WhitelistScreen(
                     whitelist = whitelistItems,
