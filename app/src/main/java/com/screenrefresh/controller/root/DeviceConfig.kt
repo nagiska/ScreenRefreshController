@@ -5,6 +5,7 @@ import android.hardware.display.DisplayManager
 import android.view.Display
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 object DeviceConfig {
 
@@ -18,7 +19,7 @@ object DeviceConfig {
         val display = getDefaultDisplay(context)
         val supportedModes = display?.supportedModes ?: emptyArray()
         val rates = supportedModes
-            .map { it.refreshRate.toInt() }
+            .map { it.refreshRate.roundToInt() }
             .distinct()
             .sorted()
 
@@ -39,37 +40,18 @@ object DeviceConfig {
     }
 
     private fun detectDefaultRate(context: Context, supportedRates: List<Int>): Float {
-        val defaultSysfs = readSysfsDefault()
-        if (defaultSysfs > 0) return defaultSysfs.toFloat()
-
-        val defaultSettings = readSettingsDefault()
-        if (defaultSettings > 0) return defaultSettings.toFloat()
-
-        return supportedRates.firstOrNull()?.toFloat() ?: 60f
-    }
-
-    private fun readSysfsDefault(): Int {
-        val paths = listOf(
-            "/sys/class/graphics/fb0/fps",
-            "/sys/devices/virtual/graphics/fb0/fps"
-        )
-        for (path in paths) {
-            try {
-                val content = java.io.File(path).readText().trim().toIntOrNull()
-                if (content != null && content > 0) return content
-            } catch (_: Exception) {}
-        }
-        return 0
-    }
-
-    private fun readSettingsDefault(): Int {
         return try {
             val process = Runtime.getRuntime().exec(arrayOf(
-                "sh", "-c", "settings get global user_refresh_rate 2>/dev/null || echo 0"
+                "sh", "-c", "settings get global user_refresh_rate 2>/dev/null || " +
+                "settings get global peak_refresh_rate 2>/dev/null || echo 0"
             ))
             val output = process.inputStream.bufferedReader().readText().trim()
-            output.toFloatOrNull()?.toInt() ?: 0
-        } catch (_: Exception) { 0 }
+            val rate = output.toFloatOrNull()
+            if (rate != null && rate > 0 && supportedRates.contains(rate.roundToInt())) rate
+            else supportedRates.firstOrNull()?.toFloat() ?: 60f
+        } catch (_: Exception) {
+            supportedRates.firstOrNull()?.toFloat() ?: 60f
+        }
     }
 
     suspend fun parseDtboRefreshRates(): List<Int> {
@@ -84,12 +66,8 @@ object DeviceConfig {
                         .filter { it in 30..240 }
                         .distinct()
                         .sorted()
-                } else {
-                    emptyList()
-                }
-            } catch (e: Exception) {
-                emptyList()
-            }
+                } else emptyList()
+            } catch (_: Exception) { emptyList() }
         }
     }
 }

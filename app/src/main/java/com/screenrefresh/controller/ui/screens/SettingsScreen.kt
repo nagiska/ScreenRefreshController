@@ -191,7 +191,10 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.Medium
                             )
                             Text(
-                                text = profile.rates.joinToString(" → ") { "${it}Hz" },
+                                text = if (profile.id == "low")
+                                    "设备所有可用刷新率逐级提升"
+                                else
+                                    profile.rates.joinToString(" → ") { "${it}Hz" },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

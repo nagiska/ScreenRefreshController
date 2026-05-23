@@ -141,7 +141,8 @@ private fun MainContent(
                     onToggleService = onToggleService,
                     onManualSetRate = { rate ->
                         CoroutineScope(Dispatchers.IO).launch {
-                            refreshController.setRefreshRate(rate)
+                            refreshController.safeSetRefreshRate(rate)
+                            refreshController.debugTryAllMethods(rate)
                         }
                     },
                     onClearDebug = { refreshController.clearDebugLog() }
