@@ -40,9 +40,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import com.screenrefresh.controller.root.RateController
 import com.screenrefresh.controller.root.RootExecutor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 val MiuiBlue = Color(0xFF1677FF)
@@ -51,7 +53,7 @@ val MiuiBg = Color(0xFFF2F3F5)
 val MiuiCardBg = Color.White
 val MiuiText = Color(0xFF1A1A1A)
 val MiuiGray = Color(0xFF8E8E93)
-val PROFILE_RATES = listOf(120, 132, 144, 156, 165)
+val MiuiGray = Color(0xFF8E8E93)
 
 val MiuiLightScheme = lightColorScheme(
     primary = MiuiBlue,
@@ -73,14 +75,17 @@ val MiuiLightScheme = lightColorScheme(
 fun DashboardScreen(
     currentRate: Int,
     kernelVersion: String,
+    availableRates: List<Int> = emptyList(),
     isServiceRunning: Boolean = false,
     onOpenAccessibility: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
+    val ctx = LocalContext.current
     var curRate by remember { mutableIntStateOf(currentRate) }
     var kern by remember { mutableStateOf(kernelVersion) }
     var showDebug by remember { mutableStateOf(false) }
     var debug by remember { mutableStateOf<List<RootExecutor.DebugEntry>>(emptyList()) }
+    val rates = if (availableRates.isNotEmpty()) availableRates.sorted() else listOf(120, 132, 144, 156, 165)
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)
         .padding(top = 20.dp, bottom = 40.dp)) {
@@ -118,7 +123,7 @@ fun DashboardScreen(
 
             // Right: 5 bars stacked vertically
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                PROFILE_RATES.forEach { rate ->
+                rates.forEach { rate ->
                     val active = rate == curRate
                     Box(
                         Modifier.weight(1f).fillMaxWidth()
@@ -127,7 +132,8 @@ fun DashboardScreen(
                             .clickable {
                                 scope.launch(Dispatchers.IO) {
                                     RateController.setRate(rate)
-                                    curRate = RateController.getCurrentRate()
+                                    delay(500)
+                                    curRate = RateController.getCurrentRate(ctx)
                                     debug = RateController.lastDebugEntries
                                 }
                             },
@@ -163,14 +169,15 @@ fun DashboardScreen(
 
         // ── Manual buttons ──
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            val half = (rates.size + 1) / 2
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                PROFILE_RATES.take(3).forEach { rate ->
-                    RateButton(rate, curRate, scope) { curRate = it; debug = RateController.lastDebugEntries }
+                rates.take(half).forEach { rate ->
+                    RateButton(rate, curRate, scope, ctx) { curRate = it; debug = RateController.lastDebugEntries }
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                PROFILE_RATES.drop(3).forEach { rate ->
-                    RateButton(rate, curRate, scope) { curRate = it; debug = RateController.lastDebugEntries }
+                rates.drop(half).forEach { rate ->
+                    RateButton(rate, curRate, scope, ctx) { curRate = it; debug = RateController.lastDebugEntries }
                 }
             }
         }
@@ -191,7 +198,7 @@ fun DashboardScreen(
 
             FilledTonalButton(onClick = {
                 scope.launch(Dispatchers.IO) {
-                    curRate = RateController.getCurrentRate()
+                    curRate = RateController.getCurrentRate(ctx)
                 }
             }, Modifier.weight(1f).height(40.dp), shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color.White)
@@ -258,6 +265,7 @@ fun RowScope.RateButton(
     rate: Int,
     curRate: Int,
     scope: kotlinx.coroutines.CoroutineScope,
+    ctx: android.content.Context,
     onDone: (Int) -> Unit
 ) {
     val active = rate == curRate
@@ -265,7 +273,8 @@ fun RowScope.RateButton(
         onClick = {
             scope.launch(Dispatchers.IO) {
                 RateController.setRate(rate)
-                val fresh = RateController.getCurrentRate()
+                delay(500) // wait for display to switch
+                val fresh = RateController.getCurrentRate(ctx)
                 onDone(fresh)
             }
         },

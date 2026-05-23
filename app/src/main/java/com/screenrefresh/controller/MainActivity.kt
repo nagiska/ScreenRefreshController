@@ -55,13 +55,15 @@ fun MainContent() {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var currentRate by remember { mutableIntStateOf(120) }
     var kernelVer by remember { mutableStateOf("loading...") }
+    var availableRates by remember { mutableStateOf<List<Int>>(emptyList()) }
     val isServiceRunning by AppDetectionService.isRunning.collectAsState()
     val ctx = LocalContext.current
 
     LaunchedEffect(Unit) {
-        currentRate = RateController.getCurrentRate()
-        kernelVer = RateController.getKernelVersion()
         RateController.scanModes()
+        availableRates = RateController.getAvailableRates()
+        currentRate = RateController.getCurrentRate(ctx)
+        kernelVer = RateController.getKernelVersion()
     }
 
     Scaffold(
@@ -87,6 +89,7 @@ fun MainContent() {
                 0 -> DashboardScreen(
                     currentRate = currentRate,
                     kernelVersion = kernelVer,
+                    availableRates = availableRates,
                     isServiceRunning = isServiceRunning,
                     onOpenAccessibility = {
                         ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
