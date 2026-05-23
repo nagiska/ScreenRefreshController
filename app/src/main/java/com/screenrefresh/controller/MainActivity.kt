@@ -11,7 +11,6 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -26,12 +25,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import com.screenrefresh.controller.data.AppDatabase
 import com.screenrefresh.controller.root.DeviceConfig
+import com.screenrefresh.controller.root.RefreshRateController
 import com.screenrefresh.controller.root.StepProfiles
 import com.screenrefresh.controller.service.AppDetectionAccessibilityService
-import com.screenrefresh.controller.service.SettingsManager
 import com.screenrefresh.controller.ui.screens.DashboardScreen
 import com.screenrefresh.controller.ui.screens.SettingsScreen
 import com.screenrefresh.controller.ui.screens.WhitelistScreen
@@ -44,6 +41,7 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
 
     private val app by lazy { application as ScreenRefreshApp }
+    private val refreshController = RefreshRateController()
     private val scope = CoroutineScope(Dispatchers.Main)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,9 +51,14 @@ class MainActivity : ComponentActivity() {
             ScreenRefreshTheme {
                 MainContent(
                     app = app,
+                    refreshController = refreshController,
                     onToggleService = { toggleAccessibilityService() }
                 )
             }
+        }
+
+        scope.launch {
+            refreshController.initDefaultRate()
         }
     }
 
@@ -63,8 +66,7 @@ class MainActivity : ComponentActivity() {
         if (AppDetectionAccessibilityService.isRunning.value) {
             stopService(Intent(this, AppDetectionAccessibilityService::class.java))
         } else {
-            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-            startActivity(intent)
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
     }
 }
@@ -72,11 +74,13 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun MainContent(
     app: ScreenRefreshApp,
+    refreshController: RefreshRateController,
     onToggleService: () -> Unit
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     val isServiceRunning by AppDetectionAccessibilityService.isRunning.collectAsState()
     val isRootAvailable by app.isRootAvailable.collectAsState()
+    val debugEntries by refreshController.debugLog.collectAsState()
 
     val whitelistItems by app.database.whitelistDao().getAllFlow().collectAsState(initial = emptyList())
     var supportedRates by remember { mutableStateOf<List<Int>>(emptyList()) }
@@ -91,6 +95,12 @@ private fun MainContent(
         currentProfileName = profile.name
         supportedRates = StepProfiles.getAvailableRates(profile, config.supportedRates)
         currentRate = config.currentRate.toInt()
+    }
+
+    LaunchedEffect(Unit) {
+        refreshController.currentRate.collect { rate ->
+            currentRate = rate
+        }
     }
 
     Scaffold(
@@ -116,17 +126,24 @@ private fun MainContent(
                 )
             }
         }
-            ) { padding ->
-                when (selectedTab) {
-                    0 -> DashboardScreen(
-                        isServiceRunning = isServiceRunning,
-                        isRootAvailable = isRootAvailable,
-                        currentRate = currentRate,
-                        isStepping = false,
-                        supportedRates = supportedRates,
-                        profileName = currentProfileName,
-                        onToggleService = onToggleService
-                    )
+    ) { padding ->
+        when (selectedTab) {
+            0 -> DashboardScreen(
+                isServiceRunning = isServiceRunning,
+                isRootAvailable = isRootAvailable,
+                currentRate = currentRate,
+                isStepping = false,
+                supportedRates = supportedRates,
+                profileName = currentProfileName,
+                debugEntries = debugEntries,
+                onToggleService = onToggleService,
+                onManualSetRate = { rate ->
+                    CoroutineScope(Dispatchers.IO).launch {
+                        refreshController.setRefreshRate(rate)
+                    }
+                },
+                onClearDebug = { refreshController.clearDebugLog() }
+            )
             1 -> WhitelistScreen(
                 whitelist = whitelistItems,
                 onAdd = { entity ->
