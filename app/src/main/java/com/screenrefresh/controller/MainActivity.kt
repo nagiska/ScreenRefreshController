@@ -135,24 +135,33 @@ fun MainScreen() {
 
         // === Diagnostic ===
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilledTonalButton(Modifier.weight(1f), onClick = {
-                scope.launch(Dispatchers.IO) {
-                    RateController.runDiagnostic()
-                    debug = RateController.lastDebugEntries
-                }
-            }) { Text("诊断系统", fontSize = 12.sp) }
+            FilledTonalButton(
+                onClick = {
+                    scope.launch(Dispatchers.IO) {
+                        RateController.runDiagnostic()
+                        debug = RateController.lastDebugEntries
+                    }
+                },
+                modifier = Modifier.weight(1f)
+            ) { Text("诊断系统", fontSize = 12.sp) }
 
-            FilledTonalButton(Modifier.weight(1f), onClick = {
-                scope.launch(Dispatchers.IO) {
-                    RateController.refreshModes()
-                    modes = RateController.getModeInfo()
-                }
-            }) { Text("重新扫描", fontSize = 12.sp) }
+            FilledTonalButton(
+                onClick = {
+                    scope.launch(Dispatchers.IO) {
+                        RateController.refreshModes()
+                        modes = RateController.getModeInfo()
+                    }
+                },
+                modifier = Modifier.weight(1f)
+            ) { Text("重新扫描", fontSize = 12.sp) }
 
-            FilledTonalButton(Modifier.weight(0.6f), onClick = {
-                RateController.clearDebug()
-                debug = emptyList()
-            }) { Text("清空", fontSize = 12.sp) }
+            FilledTonalButton(
+                onClick = {
+                    RateController.clearDebug()
+                    debug = emptyList()
+                },
+                modifier = Modifier.weight(0.6f)
+            ) { Text("清空", fontSize = 12.sp) }
         }
 
         Spacer(Modifier.height(12.dp))
