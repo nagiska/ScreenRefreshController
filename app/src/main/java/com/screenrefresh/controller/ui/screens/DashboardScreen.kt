@@ -53,7 +53,6 @@ val MiuiBg = Color(0xFFF2F3F5)
 val MiuiCardBg = Color.White
 val MiuiText = Color(0xFF1A1A1A)
 val MiuiGray = Color(0xFF8E8E93)
-val MiuiGray = Color(0xFF8E8E93)
 
 val MiuiLightScheme = lightColorScheme(
     primary = MiuiBlue,
