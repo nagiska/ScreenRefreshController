@@ -61,6 +61,20 @@ object RateController {
         anyOk
     }
 
+    suspend fun refreshModeMap() = withContext(Dispatchers.IO) {
+        val r = RootExecutor.execute("dumpsys display 2>/dev/null | grep 'DisplayModeRecord'")
+        if (!r.success || r.output.isBlank()) return@withContext
+        val pattern = Regex("""id=(\d+),\s*width=(\d+),\s*height=(\d+),\s*fps=([\d.]+)""")
+        val map = mutableMapOf<Int, Int>()
+        for (line in r.output.lines()) {
+            val m = pattern.find(line) ?: continue
+            val id = m.groupValues[1].toIntOrNull() ?: continue
+            val fps = m.groupValues[4].toFloatOrNull()?.toInt() ?: continue
+            if (fps in 30..300) map[fps] = id
+        }
+        if (map.isNotEmpty()) { modeMap = map; Log.d(TAG, "modeMap: $map") }
+    }
+
     suspend fun runDiagnostic() {
         val entries = mutableListOf<RootExecutor.DebugEntry>()
         entries.add(RootExecutor.executeWithDebug("whoami", "id"))
