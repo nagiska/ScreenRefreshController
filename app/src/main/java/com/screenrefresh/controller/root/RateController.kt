@@ -26,40 +26,37 @@ object RateController {
         if (cachedModes.isEmpty()) cachedModes = DisplayModes.scanModes()
         val modeId = DisplayModes.findModeId(cachedModes, rate)
 
-        // Build script with semicolons so one failure doesn't block the rest
-        val script = buildString {
-            appendLine("settings put global peak_refresh_rate $rate")
-            appendLine("settings put global user_refresh_rate $rate")
-            appendLine("settings put system min_refresh_rate $rate")
-            appendLine("settings put system peak_refresh_rate $rate")
-            appendLine("settings put system user_refresh_rate $rate")
-            appendLine("settings put secure miui_refresh_rate $rate")
-            val target = modeId ?: rate
-            appendLine("service call SurfaceFlinger 1035 i32 $target")
-            appendLine("echo $rate > /sys/class/graphics/fb0/fps 2>/dev/null; echo fb0=\$?")
-            appendLine("echo $rate > /sys/devices/virtual/graphics/fb0/fps 2>/dev/null; echo fb0v=\$?")
-            appendLine("echo ===VERIFY===")
-            appendLine("settings get global peak_refresh_rate")
-            appendLine("settings get secure miui_refresh_rate")
-            appendLine("settings get system user_refresh_rate")
-            appendLine("cat /sys/class/graphics/fb0/fps 2>/dev/null || echo no_fb0")
-            appendLine("echo ===DUMP_MODES===")
-            appendLine("dumpsys display 2>/dev/null | grep 'DisplayModeRecord'")
-        }
-        entries.add(RootExecutor.executeWithDebug("combined", script.trimIndent()))
+        // Step 1: Clear global conflicting settings (null might not work, use delete)
+        entries.add(RootExecutor.executeWithDebug("delete-glb-pk", "settings delete global peak_refresh_rate"))
+        entries.add(RootExecutor.executeWithDebug("delete-glb-ur", "settings delete global user_refresh_rate"))
+        entries.add(RootExecutor.executeWithDebug("delete-glb-mi", "settings delete global miui_refresh_rate"))
 
-        // Individual attempts for detailed logging
-        entries.add(RootExecutor.executeWithDebug("miui", "settings put secure miui_refresh_rate $rate"))
-        entries.add(RootExecutor.executeWithDebug("sys:user", "settings put system user_refresh_rate $rate"))
-        entries.add(RootExecutor.executeWithDebug("sys:peak", "settings put system peak_refresh_rate $rate"))
-        entries.add(RootExecutor.executeWithDebug("sys:min", "settings put system min_refresh_rate $rate"))
-        entries.add(RootExecutor.executeWithDebug("glb:peak", "settings put global peak_refresh_rate $rate"))
+        // Step 2: Set secure miui_refresh_rate (primary key that working APK uses)
+        entries.add(RootExecutor.executeWithDebug("miui-refresh", "settings put secure miui_refresh_rate $rate"))
+
+        // Step 3: Min/max bounds - must allow the target rate
+        entries.add(RootExecutor.executeWithDebug("sec-peak", "settings put secure peak_refresh_rate $rate"))
+        entries.add(RootExecutor.executeWithDebug("sec-user", "settings put secure user_refresh_rate $rate"))
+        entries.add(RootExecutor.executeWithDebug("sys-min", "settings put system min_refresh_rate $rate"))
+        entries.add(RootExecutor.executeWithDebug("sys-max", "settings put system max_refresh_rate $rate"))
+        entries.add(RootExecutor.executeWithDebug("sys-peak", "settings put system peak_refresh_rate $rate"))
+        entries.add(RootExecutor.executeWithDebug("sys-user", "settings put system user_refresh_rate $rate"))
+        entries.add(RootExecutor.executeWithDebug("glb-min", "settings put global min_refresh_rate $rate"))
+        entries.add(RootExecutor.executeWithDebug("glb-max", "settings put global max_refresh_rate $rate"))
+
+        // Step 5: SurfaceFlinger with mode ID (if we have it)
         val target = modeId ?: rate
-        entries.add(RootExecutor.executeWithDebug("sf:1035", "service call SurfaceFlinger 1035 i32 $target"))
-        entries.add(RootExecutor.executeWithDebug("fb0", "echo $rate > /sys/class/graphics/fb0/fps && cat /sys/class/graphics/fb0/fps"))
+        entries.add(RootExecutor.executeWithDebug("sf-1035", "service call SurfaceFlinger 1035 i32 $target"))
 
-        // Success check
-        val anyOk = entries.any { it.success && (it.output.contains(rate.toString()) || it.output.trim().toIntOrNull() == rate) }
+        // Step 6: Verify
+        val verify = buildString {
+            appendLine("settings get secure miui_refresh_rate")
+            appendLine("settings get secure peak_refresh_rate")
+            appendLine("settings get global peak_refresh_rate")
+        }
+        entries.add(RootExecutor.executeWithDebug("verify", verify.trimEnd()))
+
+        val anyOk = entries.any { it.success && it.output.contains(rate.toString()) }
         lastDebugEntries = entries
         if (!anyOk) Log.w(TAG, "All methods failed for $rate Hz")
         anyOk
@@ -68,15 +65,12 @@ object RateController {
     suspend fun runDiagnostic() {
         val entries = mutableListOf<RootExecutor.DebugEntry>()
         entries.add(RootExecutor.executeWithDebug("whoami", "id"))
-        entries.add(RootExecutor.executeWithDebug("dumpsys-full", "dumpsys display 2>/dev/null"))
-        entries.add(RootExecutor.executeWithDebug("dumpsys-modes", "dumpsys display 2>/dev/null | grep 'DisplayModeRecord'"))
-        entries.add(RootExecutor.executeWithDebug("fb0-fps", "cat /sys/class/graphics/fb0/fps 2>/dev/null || echo NOT_FOUND"))
-        entries.add(RootExecutor.executeWithDebug("set-global", "settings list global 2>/dev/null | grep -i ref"))
-        entries.add(RootExecutor.executeWithDebug("set-system", "settings list system 2>/dev/null | grep -i ref"))
-        entries.add(RootExecutor.executeWithDebug("set-secure", "settings list secure 2>/dev/null | grep -i ref"))
-        entries.add(RootExecutor.executeWithDebug("test-put-sys", "settings put system user_refresh_rate 120 && settings get system user_refresh_rate"))
-        entries.add(RootExecutor.executeWithDebug("test-sf-120", "service call SurfaceFlinger 1035 i32 2"))
-        entries.add(RootExecutor.executeWithDebug("which-su", "which su"))
+        entries.add(RootExecutor.executeWithDebug("dumpsys-modes", "dumpsys display 2>/dev/null | grep -A2 'DisplayModeRecord'"))
+        entries.add(RootExecutor.executeWithDebug("dumpsys-rate", "dumpsys display 2>/dev/null | grep -i -E '(mDesired|mActive|refreshRate|fps=)'"))
+        entries.add(RootExecutor.executeWithDebug("curr-settings", "settings get secure miui_refresh_rate && settings get secure peak_refresh_rate && settings get global peak_refresh_rate"))
+        entries.add(RootExecutor.executeWithDebug("list-global", "settings list global 2>/dev/null | grep -i ref | head -10"))
+        entries.add(RootExecutor.executeWithDebug("list-secure", "settings list secure 2>/dev/null | grep -i ref | head -10"))
+        entries.add(RootExecutor.executeWithDebug("list-system", "settings list system 2>/dev/null | grep -i ref | head -10"))
         lastDebugEntries = entries
     }
 

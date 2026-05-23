@@ -101,7 +101,7 @@ fun MainScreen() {
 
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(4.dp)){
-            listOf(60,90,120,144,165).forEach{ r->
+            listOf(120, 132, 144, 156, 165).forEach{ r->
                 FilledTonalButton(onClick={
                     scope.launch(Dispatchers.IO){
                         RateController.setRate(r)
