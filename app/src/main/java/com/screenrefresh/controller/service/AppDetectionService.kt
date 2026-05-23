@@ -56,11 +56,6 @@ class AppDetectionService : AccessibilityService() {
         scope.launch {
             val db = ScreenRefreshApp.instance.db
             val entity = db.whitelistDao().getByPackage(pkg)
-            val entries = mutableListOf<com.screenrefresh.controller.root.RootExecutor.DebugEntry>()
-            entries.add(com.screenrefresh.controller.root.RootExecutor.DebugEntry(
-                "svc-detect", pkg, entity != null, if (entity != null) "target=${entity.targetRate}" else "not whitelisted", "", 0, ""
-            ))
-            com.screenrefresh.controller.root.RateController.lastDebugEntries = entries
             if (entity != null) {
                 val nm = getSystemService(android.app.NotificationManager::class.java)
                 nm?.notify(1, buildNotification("${entity.appName} → ${entity.targetRate}Hz"))

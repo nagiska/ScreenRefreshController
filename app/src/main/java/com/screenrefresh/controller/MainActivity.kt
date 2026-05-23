@@ -29,6 +29,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import com.screenrefresh.controller.root.RateController
 import com.screenrefresh.controller.root.RootExecutor
 import com.screenrefresh.controller.service.AppDetectionService
@@ -55,6 +56,7 @@ fun MainContent() {
     var currentRate by remember { mutableIntStateOf(120) }
     var kernelVer by remember { mutableStateOf("loading...") }
     val isServiceRunning by AppDetectionService.isRunning.collectAsState()
+    val ctx = LocalContext.current
 
     LaunchedEffect(Unit) {
         currentRate = RateController.getCurrentRate()
@@ -86,7 +88,7 @@ fun MainContent() {
                     kernelVersion = kernelVer,
                     isServiceRunning = isServiceRunning,
                     onOpenAccessibility = {
-                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     }
                 )
                 1 -> WhitelistScreen()
