@@ -59,7 +59,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.screenrefresh.controller.ScreenRefreshApp
 import com.screenrefresh.controller.data.WhitelistEntity
-import com.screenrefresh.controller.root.Stepper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -257,24 +256,29 @@ fun AppCard(packageName: String, appName: String, targetRate: Int, onRateClick: 
 
 @Composable
 fun RatePickerDialog(app: WhitelistEntity, onSelect: (Int) -> Unit, onDismiss: () -> Unit) {
-    val rates = listOf(120, 132, 144, 156, 165)
+    val rates = listOf(
+        Triple(120, "120Hz", ""),
+        Triple(144, "144Hz", "120→132→144"),
+        Triple(165, "165Hz", "120→132→144→156→165"),
+    )
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("${app.appName} 刷新率") },
         text = {
             Column(Modifier.fillMaxWidth()) {
-                rates.forEach { rate ->
-                    val chain = Stepper.getChain(rate)
-                    val desc = if (chain.size > 1) " → ${chain.drop(1).joinToString("→")}" else ""
+                rates.forEach { (rate, label, chain) ->
                     Card(Modifier.fillMaxWidth().clickable { onSelect(rate) }.padding(vertical = 3.dp),
                         shape = RoundedCornerShape(10.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = if (rate == app.targetRate) MiuiBlue else Color(0xFFF2F3F5))
                     ) {
                         Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                            Text("${rate}Hz$desc", fontSize = 14.sp,
+                            Text(label, fontSize = 16.sp,
                                 fontWeight = if (rate == app.targetRate) FontWeight.Bold else FontWeight.Normal,
                                 color = if (rate == app.targetRate) Color.White else MiuiText)
+                            if (chain.isNotEmpty())
+                                Text(chain, fontSize = 11.sp,
+                                    color = if (rate == app.targetRate) Color(0xFFB8D4FF) else MiuiGray)
                         }
                     }
                 }

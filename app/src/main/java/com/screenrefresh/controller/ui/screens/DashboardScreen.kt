@@ -79,54 +79,46 @@ fun DashboardScreen(
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 12.dp)) {
 
-        // ── Top row: Current rate box + Step buttons ──
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // Left: current rate card with green checkmark
+        // ── Top row: Current rate box + Step indicators ──
+        Row(Modifier.fillMaxWidth().height(72.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Left: current rate card (square-ish, tall)
             Card(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = MiuiCardBg),
                 elevation = CardDefaults.cardElevation(0.dp)
             ) {
                 Row(
-                    Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    Modifier.padding(horizontal = 14.dp, vertical = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Green checkmark circle
                     Box(
-                        Modifier.size(20.dp).clip(RoundedCornerShape(10.dp))
-                            .background(MiuiGreen),
+                        Modifier.size(22.dp).clip(RoundedCornerShape(11.dp)).background(MiuiGreen),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("✓", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("✓", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.width(8.dp))
                     Column {
-                        Text("${curRate} Hz", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MiuiText)
-                        Text("当前刷新率", fontSize = 10.sp, color = MiuiGray)
+                        Text("${curRate} Hz", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MiuiText)
+                        Text("当前刷新率", fontSize = 9.sp, color = MiuiGray)
                     }
                 }
             }
 
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(6.dp))
 
-            // Right: step rate buttons
-            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            // Right: 5 horizontal bars stacked vertically
+            Column(Modifier.weight(1f).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 PROFILE_RATES.forEach { rate ->
                     val active = rate == curRate
                     Box(
-                        Modifier
-                            .weight(1f).height(40.dp)
+                        Modifier.weight(1f).fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
-                            .background(if (active) MiuiBlue else Color(0xFFEEEEEF))
-                            .let {
-                                if (!active) it else it
-                            },
+                            .background(if (active) MiuiBlue else Color(0xFFEEEEEF)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            "${rate}Hz", fontSize = 10.sp,
+                            "${rate}Hz", fontSize = 11.sp,
                             fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
                             color = if (active) Color.White else MiuiGray
                         )
