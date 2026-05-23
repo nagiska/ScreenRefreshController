@@ -12,8 +12,6 @@ import android.view.accessibility.AccessibilityEvent
 import androidx.core.app.NotificationCompat
 import com.screenrefresh.controller.R
 import com.screenrefresh.controller.data.AppDatabase
-import com.screenrefresh.controller.data.WhitelistEntity
-import com.screenrefresh.controller.root.DeviceConfig
 import com.screenrefresh.controller.root.RefreshRateController
 import com.screenrefresh.controller.root.RootShell
 import com.screenrefresh.controller.root.StepProfiles
@@ -73,13 +71,8 @@ class AppDetectionAccessibilityService : AccessibilityService() {
     }
 
     private suspend fun refreshAvailableRates() {
-        val config = DeviceConfig.detectRefreshRates(this)
         val profile = StepProfiles.getById(settingsManager.selectedProfileId)
-        availableRates = StepProfiles.getAvailableRates(profile, config.supportedRates)
-
-        if (availableRates.isEmpty()) {
-            availableRates = config.supportedRates.filter { it >= 60 }
-        }
+        availableRates = StepProfiles.getEffectiveRates(profile, settingsManager.customRates)
     }
 
     override fun onServiceConnected() {

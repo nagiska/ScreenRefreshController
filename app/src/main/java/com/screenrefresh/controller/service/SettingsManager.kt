@@ -12,29 +12,29 @@ class SettingsManager(context: Context) {
         get() = prefs.getLong(KEY_STEP_INTERVAL, DEFAULT_STEP_INTERVAL)
         set(value) = prefs.edit().putLong(KEY_STEP_INTERVAL, value).apply()
 
-    var autoStartEnabled: Boolean
-        get() = prefs.getBoolean(KEY_AUTO_START, false)
-        set(value) = prefs.edit().putBoolean(KEY_AUTO_START, value).apply()
-
     var resetOnExit: Boolean
         get() = prefs.getBoolean(KEY_RESET_ON_EXIT, true)
         set(value) = prefs.edit().putBoolean(KEY_RESET_ON_EXIT, value).apply()
 
-    var defaultRefreshRate: Int
-        get() = prefs.getInt(KEY_DEFAULT_RATE, 60)
-        set(value) = prefs.edit().putInt(KEY_DEFAULT_RATE, value).apply()
-
     var selectedProfileId: String
-        get() = prefs.getString(KEY_PROFILE, "standard") ?: "standard"
+        get() = prefs.getString(KEY_PROFILE, "120_144") ?: "120_144"
         set(value) = prefs.edit().putString(KEY_PROFILE, value).apply()
+
+    var customRates: List<Int>
+        get() {
+            val str = prefs.getString(KEY_CUSTOM_RATES, "120,144,165") ?: "120,144,165"
+            return str.split(",").mapNotNull { it.trim().toIntOrNull() }
+        }
+        set(value) {
+            prefs.edit().putString(KEY_CUSTOM_RATES, value.joinToString(",")).apply()
+        }
 
     companion object {
         private const val PREFS_NAME = "screen_refresh_settings"
         private const val KEY_STEP_INTERVAL = "step_interval_ms"
-        private const val KEY_AUTO_START = "auto_start"
         private const val KEY_RESET_ON_EXIT = "reset_on_exit"
-        private const val KEY_DEFAULT_RATE = "default_rate"
         private const val KEY_PROFILE = "selected_profile"
+        private const val KEY_CUSTOM_RATES = "custom_rates"
         const val DEFAULT_STEP_INTERVAL = 3000L
     }
 }

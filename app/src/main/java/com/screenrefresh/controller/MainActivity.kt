@@ -26,7 +26,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import com.screenrefresh.controller.root.DeviceConfig
 import com.screenrefresh.controller.root.RefreshRateController
 import com.screenrefresh.controller.root.StepProfiles
 import com.screenrefresh.controller.service.AppDetectionAccessibilityService
@@ -37,6 +36,7 @@ import com.screenrefresh.controller.ui.theme.ScreenRefreshTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import com.screenrefresh.controller.root.DeviceConfig
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
@@ -89,13 +89,19 @@ private fun MainContent(
     var currentProfileName by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
-        val config = withContext(Dispatchers.IO) {
-            DeviceConfig.detectRefreshRates(app)
-        }
         val profile = StepProfiles.getById(app.settingsManager.selectedProfileId)
         currentProfileName = profile.name
-        supportedRates = StepProfiles.getAvailableRates(profile, config.supportedRates)
-        currentRate = config.currentRate.toInt()
+        supportedRates = StepProfiles.getEffectiveRates(profile, app.settingsManager.customRates)
+        val sysfsRate = withContext(Dispatchers.IO) {
+            DeviceConfig.getCurrentSysfsFps()
+        }
+        if (sysfsRate > 0) currentRate = sysfsRate
+    }
+    // Re-read supported rates when profile changes
+    LaunchedEffect(app.settingsManager.selectedProfileId, app.settingsManager.customRates) {
+        val profile = StepProfiles.getById(app.settingsManager.selectedProfileId)
+        currentProfileName = profile.name
+        supportedRates = StepProfiles.getEffectiveRates(profile, app.settingsManager.customRates)
     }
 
     LaunchedEffect(Unit) {
