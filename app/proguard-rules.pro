@@ -1,0 +1,1 @@
+-keepclassmembers class com.screenrefresh.controller.data.WhitelistEntity { *; }
