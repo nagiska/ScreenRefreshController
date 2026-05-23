@@ -55,10 +55,12 @@ class MainActivity : ComponentActivity() {
                     refreshController = refreshController,
                     onToggleService = { toggleAccessibilityService() }
                 )
+            }
         }
+
+        scope.launch {
+            refreshController.initDefaultRate()
         }
-    }
-}
     }
 
     private fun toggleAccessibilityService() {
@@ -127,39 +129,40 @@ private fun MainContent(
         }
     ) { padding ->
         Box(modifier = Modifier.padding(padding)) {
-        when (selectedTab) {
-            0 -> DashboardScreen(
-                isServiceRunning = isServiceRunning,
-                isRootAvailable = isRootAvailable,
-                currentRate = currentRate,
-                isStepping = false,
-                supportedRates = supportedRates,
-                profileName = currentProfileName,
-                debugEntries = debugEntries,
-                onToggleService = onToggleService,
-                onManualSetRate = { rate ->
-                    CoroutineScope(Dispatchers.IO).launch {
-                        refreshController.setRefreshRate(rate)
+            when (selectedTab) {
+                0 -> DashboardScreen(
+                    isServiceRunning = isServiceRunning,
+                    isRootAvailable = isRootAvailable,
+                    currentRate = currentRate,
+                    isStepping = false,
+                    supportedRates = supportedRates,
+                    profileName = currentProfileName,
+                    debugEntries = debugEntries,
+                    onToggleService = onToggleService,
+                    onManualSetRate = { rate ->
+                        CoroutineScope(Dispatchers.IO).launch {
+                            refreshController.setRefreshRate(rate)
+                        }
+                    },
+                    onClearDebug = { refreshController.clearDebugLog() }
+                )
+                1 -> WhitelistScreen(
+                    whitelist = whitelistItems,
+                    onAdd = { entity ->
+                        CoroutineScope(Dispatchers.IO).launch {
+                            app.database.whitelistDao().insert(entity)
+                        }
+                    },
+                    onRemove = { entity ->
+                        CoroutineScope(Dispatchers.IO).launch {
+                            app.database.whitelistDao().delete(entity)
+                        }
                     }
-                },
-                onClearDebug = { refreshController.clearDebugLog() }
-            )
-            1 -> WhitelistScreen(
-                whitelist = whitelistItems,
-                onAdd = { entity ->
-                    CoroutineScope(Dispatchers.IO).launch {
-                        app.database.whitelistDao().insert(entity)
-                    }
-                },
-                onRemove = { entity ->
-                    CoroutineScope(Dispatchers.IO).launch {
-                        app.database.whitelistDao().delete(entity)
-                    }
-                }
-            )
-            2 -> SettingsScreen(
-                settingsManager = app.settingsManager
-            )
+                )
+                2 -> SettingsScreen(
+                    settingsManager = app.settingsManager
+                )
+            }
         }
     }
 }
