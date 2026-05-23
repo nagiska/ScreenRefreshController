@@ -12,14 +12,6 @@ object RateController {
 
     private var modeMap: Map<Int, Int> = emptyMap()
 
-    // DTBO overclock mapping: display Hz → actual setting value needed
-    private val displayToSetting = mapOf(
-        120 to 120, 132 to 144, 144 to 156, 156 to 165, 165 to 165
-    )
-    private val settingToDisplay = mapOf(
-        120 to 120, 144 to 132, 156 to 144, 165 to 156
-    )
-
     suspend fun refreshModeMap() = withContext(Dispatchers.IO) {
         // Get full dumpsys, grep for mode records
         val r = RootExecutor.execute("dumpsys display 2>/dev/null | grep 'DisplayModeRecord'")
@@ -41,13 +33,11 @@ object RateController {
 
     suspend fun getCurrentRate(): Int = withContext(Dispatchers.IO) {
         val r = RootExecutor.execute("settings get secure miui_refresh_rate 2>/dev/null || echo 0")
-        val raw = r.output.trim().toFloatOrNull()?.toInt()?.takeIf { it in 30..300 } ?: 120
-        settingToDisplay[raw] ?: raw
+        r.output.trim().toFloatOrNull()?.toInt()?.takeIf { it in 30..300 } ?: 120
     }
 
-    suspend fun setRate(displayRate: Int): Boolean = withContext(Dispatchers.IO) {
-        val rate = displayToSetting[displayRate] ?: displayRate
-        Log.d(TAG, "=== setRate(display=${displayRate} → setting=${rate}) ===")
+    suspend fun setRate(rate: Int): Boolean = withContext(Dispatchers.IO) {
+        Log.d(TAG, "=== setRate($rate) ===")
         val entries = mutableListOf<RootExecutor.DebugEntry>()
 
         // Refresh mode map if empty
@@ -74,11 +64,11 @@ object RateController {
         entries.add(RootExecutor.executeWithDebug("glb-min", "settings put global min_refresh_rate $rate"))
         entries.add(RootExecutor.executeWithDebug("glb-max", "settings put global max_refresh_rate $rate"))
 
-        // Step 5: SurfaceFlinger with modeId (crucial for DTBO oc)
+        // Step 5: SurfaceFlinger with modeId (displayId=0 first!)
         if (modeId != null) {
-            entries.add(RootExecutor.executeWithDebug("sf-modeId", "service call SurfaceFlinger 1035 i32 $modeId"))
+            entries.add(RootExecutor.executeWithDebug("sf-modeId", "service call SurfaceFlinger 1035 i32 0 i32 $modeId"))
         } else {
-            entries.add(RootExecutor.executeWithDebug("sf-raw", "service call SurfaceFlinger 1035 i32 $rate"))
+            entries.add(RootExecutor.executeWithDebug("sf-raw", "service call SurfaceFlinger 1035 i32 0 i32 $rate"))
         }
 
         // Verify
