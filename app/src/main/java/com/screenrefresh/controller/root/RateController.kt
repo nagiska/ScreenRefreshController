@@ -10,37 +10,44 @@ object RateController {
     var lastDebugEntries: List<RootExecutor.DebugEntry> = emptyList()
         private set
 
-    // Display Hz → SurfaceFlinger modeId (from dumpsys)
     var hzToModeId: Map<Int, Int> = emptyMap()
         private set
 
-    /** Scan dumpsys for ALL DisplayModeRecords, build Hz→modeId map */
+    /** Scan dumpsys for modeId→Hz mapping. Xiaomi format: "modeId N renderFrameRate X.Y" */
     suspend fun scanAllModes() = withContext(Dispatchers.IO) {
         val entries = mutableListOf<RootExecutor.DebugEntry>()
+        // Get raw dumpsys output, search for modeId lines
+        val r = RootExecutor.execute("dumpsys display 2>/dev/null | grep -E 'modeId|fps=|DisplayModeRecord'")
+        entries.add(RootExecutor.executeWithDebug("dumpsys-raw", r.output.ifBlank { "(empty)" }))
 
-        // Try multiple grep patterns to catch mode records
-        for (grep in listOf(
-            "dumpsys display 2>/dev/null | grep -E '(DisplayModeRecord|id=.*fps=)'",
-            "dumpsys display 2>/dev/null | grep -B1 'fps='",
-            "dumpsys display 2>/dev/null | grep -E '(fps=[0-9]|DisplayMode)'"
-        )) {
-            val r = RootExecutor.execute(grep)
-            if (!r.success || r.output.isBlank()) continue
-
-            val pat = Regex("""id=(\d+),\s*width=(\d+),\s*height=(\d+),\s*fps=([\d.]+)""")
-            val map = mutableMapOf<Int, Int>()
+        val map = mutableMapOf<Int, Int>()
+        // Pattern 1: "modeId N renderFrameRate X.Y" (Xiaomi/HyperOS)
+        val pat1 = Regex("""modeId\s+(\d+).*renderFrameRate\s+([\d.]+)""")
+        r.output.lines().forEach { line ->
+            pat1.find(line)?.let { m ->
+                val id = m.groupValues[1].toIntOrNull() ?: return@forEach
+                val hz = m.groupValues[2].toFloatOrNull()?.toInt() ?: return@forEach
+                if (hz in 30..300) map[hz] = id
+            }
+        }
+        // Pattern 2: "id=N, width=W, height=H, fps=X.Y" (AOSP)
+        if (map.isEmpty()) {
+            val pat2 = Regex("""id=(\d+),\s*width=(\d+),\s*height=(\d+),\s*fps=([\d.]+)""")
             r.output.lines().forEach { line ->
-                val f = pat.find(line) ?: return@forEach
-                val id = f.groupValues[1].toIntOrNull() ?: return@forEach
-                val fps = f.groupValues[4].toFloatOrNull()?.toInt() ?: return@forEach
-                if (fps in 30..300) map[fps] = id
+                pat2.find(line)?.let { m ->
+                    val id = m.groupValues[1].toIntOrNull() ?: return@forEach
+                    val hz = m.groupValues[4].toFloatOrNull()?.toInt() ?: return@forEach
+                    if (hz in 30..300) map[hz] = id
+                }
             }
-            if (map.isNotEmpty()) {
-                hzToModeId = map
-                entries.add(RootExecutor.executeWithDebug("mode-ids", "echo $map"))
-                Log.d(TAG, "Found mode IDs: $map")
-                break
-            }
+        }
+
+        if (map.isNotEmpty()) {
+            hzToModeId = map
+            entries.add(RootExecutor.executeWithDebug("mode-ok", "mapping=$map"))
+        } else {
+            entries.add(RootExecutor.executeWithDebug("mode-fail",
+                "no modes found — check dumpsys-raw above"))
         }
         lastDebugEntries = entries
     }
@@ -50,20 +57,16 @@ object RateController {
         r.output.trim().toFloatOrNull()?.toInt()?.takeIf { it in 30..300 } ?: 120
     }
 
-    /** Works like the reference APK: settings put + service call SurfaceFlinger */
     suspend fun setRate(targetHz: Int): Boolean = withContext(Dispatchers.IO) {
         Log.d(TAG, "setRate($targetHz)")
         val entries = mutableListOf<RootExecutor.DebugEntry>()
 
-        // Scan modes if needed
         if (hzToModeId.isEmpty()) scanAllModes()
         val modeId = hzToModeId[targetHz]
 
-        // 1. Delete conflicting globals
         entries.add(RootExecutor.executeWithDebug("del-pk", "settings delete global peak_refresh_rate"))
         entries.add(RootExecutor.executeWithDebug("del-ur", "settings delete global user_refresh_rate"))
 
-        // 2. Settings put (like reference APK)
         entries.add(RootExecutor.executeWithDebug("miui",  "settings put secure miui_refresh_rate $targetHz"))
         entries.add(RootExecutor.executeWithDebug("peak",  "settings put secure peak_refresh_rate $targetHz"))
         entries.add(RootExecutor.executeWithDebug("user",  "settings put secure user_refresh_rate $targetHz"))
@@ -74,19 +77,18 @@ object RateController {
         entries.add(RootExecutor.executeWithDebug("g-min", "settings put global min_refresh_rate $targetHz"))
         entries.add(RootExecutor.executeWithDebug("g-max", "settings put global max_refresh_rate $targetHz"))
 
-        // 3. SurfaceFlinger with modeId (like reference APK)
         if (modeId != null) {
-            entries.add(RootExecutor.executeWithDebug("sf-1035",
-                "service call SurfaceFlinger 1035 i32 $modeId"))
+            entries.add(RootExecutor.executeWithDebug("sf",
+                "service call SurfaceFlinger 1035 i32 0 i32 $modeId"))
         } else {
-            entries.add(RootExecutor.executeWithDebug("sf-missing",
-                "echo 'modeId not found for ${targetHz}Hz in dumpsys'"))
+            entries.add(RootExecutor.executeWithDebug("sf-skip",
+                "echo 'no modeId for ${targetHz}Hz; try 132-144-156-165 as mode IDs'"))
+            // Try targeting Hz as potential modeId
+            entries.add(RootExecutor.executeWithDebug("sf-guess",
+                "service call SurfaceFlinger 1035 i32 0 i32 $targetHz"))
         }
 
-        // 4. Verify
-        entries.add(RootExecutor.executeWithDebug("verify",
-            "settings get secure miui_refresh_rate"))
-
+        entries.add(RootExecutor.executeWithDebug("verify", "settings get secure miui_refresh_rate"))
         val ok = entries.any { it.success && it.output.contains(targetHz.toString()) }
         lastDebugEntries = entries
         ok
@@ -95,22 +97,18 @@ object RateController {
     suspend fun runDiagnostic() {
         val entries = mutableListOf<RootExecutor.DebugEntry>()
         entries.add(RootExecutor.executeWithDebug("whoami", "id"))
-        entries.add(RootExecutor.executeWithDebug("dumpsys-modes",
-            "dumpsys display 2>/dev/null | grep -E '(DisplayModeRecord|id=.*fps=)'"))
+        entries.add(RootExecutor.executeWithDebug("dumpsys-full",
+            "dumpsys display 2>/dev/null"))
         entries.add(RootExecutor.executeWithDebug("cur-miui",
             "settings get secure miui_refresh_rate"))
-        entries.add(RootExecutor.executeWithDebug("cur-peak",
-            "settings get secure peak_refresh_rate"))
         entries.add(RootExecutor.executeWithDebug("mode-map",
             "echo $hzToModeId"))
         lastDebugEntries = entries
     }
 
     suspend fun resetTo120() { setRate(120) }
-
     suspend fun getKernelVersion(): String = withContext(Dispatchers.IO) {
         RootExecutor.execute("uname -r").output.trim().ifEmpty { "unknown" }
     }
-
     fun clearDebug() { lastDebugEntries = emptyList() }
 }
