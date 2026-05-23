@@ -40,87 +40,84 @@ object RootExecutor {
         } catch (e: Exception) { false }
     }
 
-    // Method 1: su -c (traditional, works on most Magisk)
-    private suspend fun suCmdExec(script: String): Result = withContext(Dispatchers.IO) {
+    // Method 1: su -c (standard)
+    private suspend fun suCmdExec(command: String): Result = withContext(Dispatchers.IO) {
         try {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", script))
+            val cmd = "exec sh -c '$command'"
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
             val out = BufferedReader(InputStreamReader(process.inputStream)).readText().trim()
             val err = BufferedReader(InputStreamReader(process.errorStream)).readText().trim()
             val exit = process.waitFor()
             Result(exit == 0, out, err, "su-c")
         } catch (e: Exception) {
-            Result(false, "", e.message ?: "su-c err", "su-c")
+            Result(false, "", e.message ?: "err", "su-c")
         }
     }
 
-    // Method 2: sh (shell) via su, script on stdin
-    private suspend fun suPipeExec(script: String): Result = withContext(Dispatchers.IO) {
+    // Method 2: su pipe (stdin)
+    private suspend fun suPipeExec(command: String): Result = withContext(Dispatchers.IO) {
         try {
             val process = Runtime.getRuntime().exec("su")
             val stdin = DataOutputStream(process.outputStream)
-            val stdout = BufferedReader(InputStreamReader(process.inputStream))
-            val stderr = BufferedReader(InputStreamReader(process.errorStream))
-
-            stdin.writeBytes("$script\n")
-            stdin.writeBytes("echo ___EXIT___\$?\n")
+            stdin.writeBytes("$command\n")
             stdin.writeBytes("exit\n")
             stdin.flush()
             stdin.close()
 
-            val output = StringBuilder()
-            var line: String?
-            while (stdout.readLine().also { line = it } != null) output.appendLine(line)
-            val error = stderr.readText().trim()
+            val out = BufferedReader(InputStreamReader(process.inputStream)).readText().trim()
+            val err = BufferedReader(InputStreamReader(process.errorStream)).readText().trim()
             process.waitFor()
-
-            val raw = output.toString().trim()
-            val marker = "___EXIT___"
-            val exitIdx = raw.lastIndexOf(marker)
-            val exitCode = if (exitIdx >= 0) {
-                raw.substring(exitIdx + marker.length).trim().toIntOrNull() ?: -1
-            } else -1
-            val clean = if (exitIdx >= 0) raw.substring(0, exitIdx).trim() else raw
-            Result(exitCode == 0, clean, error, "su-pipe")
+            Result(out.isNotEmpty() || err.isEmpty(), out, err, "su-pipe")
         } catch (e: Exception) {
-            Result(false, "", e.message ?: "su-pipe err", "su-pipe")
+            Result(false, "", e.message ?: "err", "su-pipe")
         }
     }
 
-    // Shizuku fallback
-    private suspend fun shizukuExec(script: String): Result = withContext(Dispatchers.IO) {
+    // Method 3: Shizuku
+    private suspend fun shizukuExec(command: String): Result = withContext(Dispatchers.IO) {
         try {
             val clz = Class.forName("rikka.shizuku.Shizuku")
             val m = clz.getDeclaredMethod("newProcess", Array<String>::class.java)
-            val proc = m.invoke(null, arrayOf("sh", "-c", script))
+            val proc = m.invoke(null, arrayOf("sh", "-c", command))
             val pCls = proc::class.java
             val ism = pCls.getDeclaredMethod("getInputStream")
             val esm = pCls.getDeclaredMethod("getErrorStream")
+            val wfm = pCls.getDeclaredMethod("waitFor")
             val out = (ism.invoke(proc) as java.io.InputStream).bufferedReader().readText().trim()
             val err = (esm.invoke(proc) as java.io.InputStream).bufferedReader().readText().trim()
-            val wfm = pCls.getDeclaredMethod("waitFor")
-            val exitCode = wfm.invoke(proc) as Int
-            Result(exitCode == 0, out, err, "shizuku")
+            val code = wfm.invoke(proc) as Int
+            Result(code == 0, out, err, "shizuku")
         } catch (e: Exception) {
-            Result(false, "", e.message ?: "shizuku err", "shizuku")
+            Result(false, "", e.message ?: "err", "shizuku")
         }
     }
 
-    // Execute: try su-c → su-pipe → shizuku
+    // Primary: su-c, fallback: su-pipe, last: Shizuku
     suspend fun execute(command: String): Result = withContext(Dispatchers.IO) {
+        // Try su -c
         val r1 = suCmdExec(command)
         if (r1.success) return@withContext r1
 
+        // Try su pipe
         val r2 = suPipeExec(command)
         if (r2.success) return@withContext r2
 
-        if (isShizukuAvailable()) shizukuExec(command)
-        else r2
+        // Try Shizuku
+        if (isShizukuAvailable()) {
+            val r3 = shizukuExec(command)
+            return@withContext r3
+        }
+
+        // Return last failure with error info
+        r2
     }
 
     suspend fun executeWithDebug(label: String, command: String): DebugEntry = withContext(Dispatchers.IO) {
         val start = System.currentTimeMillis()
-        val result = execute(command)
+        val r = execute(command)
         val elapsed = System.currentTimeMillis() - start
-        DebugEntry(label, command, result.success, result.output.ifEmpty { "(empty)" }, result.error.ifEmpty { "(none)" }, elapsed, result.via)
+        val out = r.output.ifEmpty { "(empty)" }
+        val err = r.error.ifEmpty { "(none)" }
+        DebugEntry(label, command, r.success, if (r.success) out else "$out | $err", err, elapsed, r.via)
     }
 }
