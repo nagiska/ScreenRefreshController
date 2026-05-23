@@ -21,6 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -54,7 +55,7 @@ fun MainContent() {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var currentRate by remember { mutableIntStateOf(120) }
     var kernelVer by remember { mutableStateOf("loading...") }
-    val isServiceRunning by AppDetectionService.isRunning
+    val isServiceRunning by AppDetectionService.isRunning.collectAsState()
 
     LaunchedEffect(Unit) {
         currentRate = RateController.getCurrentRate()
@@ -83,11 +84,7 @@ fun MainContent() {
             when (selectedTab) {
                 0 -> DashboardScreen(
                     currentRate = currentRate,
-                    kernelVersion = kernelVer,
-                    onRefresh = {
-                        currentRate = RateController.getCurrentRate()
-                        currentRate
-                    }
+                    kernelVersion = kernelVer
                 )
                 1 -> WhitelistScreen()
             }

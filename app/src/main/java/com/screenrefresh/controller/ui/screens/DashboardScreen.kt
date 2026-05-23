@@ -69,8 +69,7 @@ val MiuiLightScheme = lightColorScheme(
 @Composable
 fun DashboardScreen(
     currentRate: Int,
-    kernelVersion: String,
-    onRefresh: () -> Int
+    kernelVersion: String
 ) {
     val scope = rememberCoroutineScope()
     var curRate by remember { mutableIntStateOf(currentRate) }
@@ -192,7 +191,6 @@ fun DashboardScreen(
             FilledTonalButton(onClick = {
                 scope.launch(Dispatchers.IO) {
                     curRate = RateController.getCurrentRate()
-                    onRefresh()
                 }
             }, Modifier.weight(1f).height(40.dp), shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color.White)

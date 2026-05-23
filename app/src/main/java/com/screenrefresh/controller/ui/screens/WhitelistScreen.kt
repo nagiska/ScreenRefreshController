@@ -191,7 +191,8 @@ fun AppPickerDialog(search: String, onSearchChange: (String) -> Unit,
                         Row(Modifier.fillMaxWidth().clickable { onSelect(app.packageName, app.label) }
                             .padding(vertical = 10.dp, horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             if (app.icon != null) {
-                                androidx.compose.foundation.Image(app.icon.asImageBitmap(), null,
+                                val bmp = iconFromDrawable(app.icon)
+                                androidx.compose.foundation.Image(bmp, null,
                                     Modifier.size(36.dp).clip(CircleShape))
                             } else {
                                 Box(Modifier.size(36.dp).clip(CircleShape).background(Color(0xFFEEEEEF)),
