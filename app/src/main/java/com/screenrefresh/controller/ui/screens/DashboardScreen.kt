@@ -26,7 +26,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -53,13 +52,28 @@ fun DashboardScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(horizontal = 16.dp)
             .verticalScroll(scrollState),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(32.dp))
-    }
-}
+        Spacer(Modifier.height(16.dp))
+
+        // Current rate
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(2.dp)) {
+            Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("当前刷新率", style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(4.dp))
+                Text("${currentRate} Hz", fontSize = 48.sp, fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary)
+                if (isStepping) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(6.dp))
+                        Text("步进中...", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary)
+                    }
                 }
             }
         }
@@ -72,7 +86,7 @@ fun DashboardScreen(
             Column(Modifier.fillMaxWidth().padding(16.dp)) {
                 StatusRow("无障碍服务", if (isServiceRunning) "运行中" else "已停止", isServiceRunning)
                 Spacer(Modifier.height(8.dp))
-                StatusRow("Root 权限", when (isRootAvailable) { true -> "已获取"; false -> "未获取"; null -> "检测中..." }, isRootAvailable == true)
+                StatusRow("Root权限", when (isRootAvailable) { true -> "已获取"; false -> "未获取"; null -> "检测中..." }, isRootAvailable == true)
                 Spacer(Modifier.height(8.dp))
                 StatusRow("步进方案", profileName, true)
             }
@@ -86,8 +100,8 @@ fun DashboardScreen(
                 elevation = CardDefaults.cardElevation(1.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     Text("手动测试", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
-                    Text("点击按钮尝试切换到对应刷新率（会尝试所有已知方法）",
+                    Spacer(Modifier.height(6.dp))
+                    Text("点击切换刷新率（会尝试所有已知方法）",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
@@ -96,9 +110,7 @@ fun DashboardScreen(
                             FilledTonalButton(
                                 onClick = { onManualSetRate(rate) },
                                 modifier = Modifier.weight(1f)
-                            ) {
-                                Text("${rate}Hz", fontSize = 12.sp)
-                            }
+                            ) { Text("${rate}Hz", fontSize = 12.sp) }
                         }
                     }
                 }
@@ -118,19 +130,19 @@ fun DashboardScreen(
                             Text("清空", fontSize = 11.sp)
                         }
                     }
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(6.dp))
                     debugEntries.forEach { entry ->
                         val icon = if (entry.success) "✅" else "❌"
                         val status = if (entry.success) "OK" else "FAIL"
-                        Column(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
                             Text("$icon [$status] ${entry.method}",
                                 fontSize = 11.sp, fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.Medium)
-                            Text(" > ${entry.command}", fontSize = 9.sp,
+                            Text("  > ${entry.command}", fontSize = 9.sp,
                                 fontFamily = FontFamily.Monospace,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (entry.output.isNotEmpty() && entry.output != "(empty)") {
-                                Text(" < ${entry.output.take(150)}",
+                                Text("  < ${entry.output.take(150)}",
                                     fontSize = 9.sp, fontFamily = FontFamily.Monospace,
                                     color = MaterialTheme.colorScheme.tertiary)
                             }
@@ -140,8 +152,8 @@ fun DashboardScreen(
             }
         }
 
+        // Bottom button
         Spacer(Modifier.height(12.dp))
-
         Button(
             onClick = onToggleService,
             modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -150,13 +162,14 @@ fun DashboardScreen(
                 containerColor = if (isServiceRunning) MaterialTheme.colorScheme.error
                 else MaterialTheme.colorScheme.primary)
         ) {
-            Icon(imageVector = if (isServiceRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
+            Icon(
+                imageVector = if (isServiceRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
                 contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
             Text(if (isServiceRunning) "停止服务" else "启动服务")
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(32.dp))
     }
 }
 
