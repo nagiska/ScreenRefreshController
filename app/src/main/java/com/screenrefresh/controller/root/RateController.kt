@@ -95,5 +95,14 @@ object RateController {
         lastDebugEntries = entries
     }
 
+    suspend fun resetTo120() {
+        setRate(120)
+    }
+
+    suspend fun getKernelVersion(): String = withContext(Dispatchers.IO) {
+        val r = RootExecutor.execute("uname -r")
+        r.output.trim().ifEmpty { "unknown" }
+    }
+
     fun clearDebug() { lastDebugEntries = emptyList() }
 }
