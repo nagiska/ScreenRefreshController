@@ -68,13 +68,14 @@ object RateController {
     suspend fun runDiagnostic() {
         val entries = mutableListOf<RootExecutor.DebugEntry>()
         entries.add(RootExecutor.executeWithDebug("whoami", "id"))
-        entries.add(RootExecutor.executeWithDebug("su-ok", "echo SU_OK"))
         entries.add(RootExecutor.executeWithDebug("dumpsys-full", "dumpsys display 2>/dev/null"))
-        entries.add(RootExecutor.executeWithDebug("modes", "dumpsys display 2>/dev/null | grep -i 'mode' | head -30"))
+        entries.add(RootExecutor.executeWithDebug("dumpsys-modes", "dumpsys display 2>/dev/null | grep 'DisplayModeRecord'"))
         entries.add(RootExecutor.executeWithDebug("fb0-fps", "cat /sys/class/graphics/fb0/fps 2>/dev/null || echo NOT_FOUND"))
-        entries.add(RootExecutor.executeWithDebug("set-global", "settings list global 2>/dev/null | grep -i refresh"))
-        entries.add(RootExecutor.executeWithDebug("set-system", "settings list system 2>/dev/null | grep -i refresh"))
-        entries.add(RootExecutor.executeWithDebug("set-secure", "settings list secure 2>/dev/null | grep -i refresh"))
+        entries.add(RootExecutor.executeWithDebug("set-global", "settings list global 2>/dev/null | grep -i ref"))
+        entries.add(RootExecutor.executeWithDebug("set-system", "settings list system 2>/dev/null | grep -i ref"))
+        entries.add(RootExecutor.executeWithDebug("set-secure", "settings list secure 2>/dev/null | grep -i ref"))
+        entries.add(RootExecutor.executeWithDebug("test-put-sys", "settings put system user_refresh_rate 120 && settings get system user_refresh_rate"))
+        entries.add(RootExecutor.executeWithDebug("test-sf-120", "service call SurfaceFlinger 1035 i32 2"))
         entries.add(RootExecutor.executeWithDebug("which-su", "which su"))
         lastDebugEntries = entries
     }
