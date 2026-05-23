@@ -1,40 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">屏幕刷新率控制器</string>
-    <string name="tab_dashboard">主页</string>
-    <string name="tab_whitelist">白名单</string>
-    <string name="tab_settings">设置</string>
-    <string name="service_status">服务状态</string>
-    <string name="service_running">运行中</string>
-    <string name="service_stopped">已停止</string>
-    <string name="current_refresh_rate">当前刷新率</string>
-    <string name="supported_rates">支持刷新率</string>
-    <string name="step_interval">步进间隔(秒)</string>
-    <string name="step_interval_desc">每级刷新率之间的等待时间</string>
-    <string name="add_app">添加应用</string>
-    <string name="remove">移除</string>
-    <string name="start_service">启动服务</string>
-    <string name="stop_service">停止服务</string>
-    <string name="no_whitelist">暂无白名单应用</string>
-    <string name="channel_name">刷新率控制</string>
-    <string name="channel_desc">管理屏幕刷新率后台服务</string>
-    <string name="service_notification_title">刷新率控制已启动</string>
-    <string name="service_notification_text">监控白名单应用并自动调节刷新率</string>
-    <string name="auto_start">开机自启</string>
-    <string name="root_status">Root 权限</string>
-    <string name="root_available">已获取</string>
-    <string name="root_unavailable">未获取</string>
-    <string name="select_app">选择应用</string>
-    <string name="app_search_hint">搜索应用...</string>
-    <string name="reset_on_exit">退出时恢复默认</string>
-    <string name="default_refresh_rate">默认刷新率</string>
-    <string name="step_profile">步进方案</string>
-    <string name="profile_standard">标准 120→132→144</string>
-    <string name="profile_high">高帧 132→144→156→165</string>
-    <string name="profile_full">全段 120→132→144→155→165</string>
-    <string name="profile_low">低帧起步 设备全部可用刷新率</string>
-    <string name="debug_title">调试日志</string>
-    <string name="manual_test">手动测试</string>
-    <string name="method_success">成功</string>
-    <string name="method_fail">失败</string>
+    <string name="app_name">刷新率控制</string>
 </resources>
