@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -55,19 +54,11 @@ val MiuiText = Color(0xFF1A1A1A)
 val MiuiGray = Color(0xFF8E8E93)
 
 val MiuiLightScheme = lightColorScheme(
-    primary = MiuiBlue,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFE6F0FF),
-    onPrimaryContainer = Color(0xFF0958D9),
-    surface = MiuiCardBg,
-    onSurface = MiuiText,
-    onSurfaceVariant = MiuiGray,
-    surfaceVariant = Color(0xFFEEEEEF),
-    background = MiuiBg,
-    onBackground = MiuiText,
-    secondary = Color(0xFF787880),
-    tertiary = MiuiGreen,
-    error = Color(0xFFFF4D4F)
+    primary = MiuiBlue, onPrimary = Color.White,
+    primaryContainer = Color(0xFFE6F0FF), onPrimaryContainer = Color(0xFF0958D9),
+    surface = MiuiCardBg, onSurface = MiuiText, onSurfaceVariant = MiuiGray,
+    surfaceVariant = Color(0xFFEEEEEF), background = MiuiBg, onBackground = MiuiText,
+    secondary = Color(0xFF787880), tertiary = MiuiGreen, error = Color(0xFFFF4D4F)
 )
 
 @Composable
@@ -87,73 +78,56 @@ fun DashboardScreen(
     val rates = if (availableRates.isNotEmpty()) availableRates.sorted() else listOf(120, 132, 144, 156, 165)
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)
-        .padding(top = 20.dp, bottom = 40.dp)) {
+        .padding(top = 24.dp, bottom = 40.dp)) {
 
-        Spacer(Modifier.height(8.dp))
-
-        // ── Top row: Current rate box + Step indicators ──
-        Row(Modifier.fillMaxWidth().height(96.dp), verticalAlignment = Alignment.CenterVertically) {
-            // Left: current rate card (bigger square)
-            Card(
-                modifier = Modifier.width(130.dp).fillMaxHeight(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MiuiCardBg),
-                elevation = CardDefaults.cardElevation(0.dp)
+        // ── Big screen card: current rate ──
+        Card(
+            Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = MiuiCardBg),
+            elevation = CardDefaults.cardElevation(0.dp)
+        ) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
-                    Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier.size(24.dp).clip(RoundedCornerShape(12.dp)).background(MiuiGreen),
-                            contentAlignment = Alignment.Center
-                        ) { Text("✓", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
-                        Spacer(Modifier.width(6.dp))
-                        Text("${curRate} Hz", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = MiuiText)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(28.dp).clip(RoundedCornerShape(14.dp)).background(MiuiGreen),
+                        contentAlignment = Alignment.Center
+                    ) { Text("✓", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+                    Spacer(Modifier.width(8.dp))
+                    Text("${curRate} Hz", fontSize = 36.sp, fontWeight = FontWeight.Bold, color = MiuiText)
+                }
+                Spacer(Modifier.height(4.dp))
+                Text("当前刷新率", fontSize = 11.sp, color = MiuiGray)
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // ── Rate buttons ──
+        val half = (rates.size + 1) / 2
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                rates.take(half).forEach { rate ->
+                    RatePill(rate, curRate, scope, ctx) {
+                        curRate = it; debug = RateController.lastDebugEntries
                     }
-                    Spacer(Modifier.height(2.dp))
-                    Text("当前刷新率", fontSize = 9.sp, color = MiuiGray)
                 }
             }
-
-            Spacer(Modifier.width(8.dp))
-
-            // Right: 5 bars stacked vertically
-            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                rates.forEach { rate ->
-                    val active = rate == curRate
-                    Box(
-                        Modifier.weight(1f).fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (active) MiuiBlue else Color(0xFFEEEEEF))
-                            .clickable {
-                                scope.launch(Dispatchers.IO) {
-                                    RateController.setRate(rate)
-                                    delay(500)
-                                    curRate = RateController.getCurrentRate(ctx)
-                                    debug = RateController.lastDebugEntries
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "${rate}Hz", fontSize = 13.sp,
-                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                            color = if (active) Color.White else MiuiGray
-                        )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                rates.drop(half).forEach { rate ->
+                    RatePill(rate, curRate, scope, ctx) {
+                        curRate = it; debug = RateController.lastDebugEntries
                     }
                 }
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(16.dp))
 
         // ── Kernel version ──
-        Card(
-            Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA)),
             elevation = CardDefaults.cardElevation(0.dp)
         ) {
@@ -164,20 +138,24 @@ fun DashboardScreen(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
 
-        // ── Manual buttons ──
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            val half = (rates.size + 1) / 2
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                rates.take(half).forEach { rate ->
-                    RateButton(rate, curRate, scope, ctx) { curRate = it; debug = RateController.lastDebugEntries }
-                }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                rates.drop(half).forEach { rate ->
-                    RateButton(rate, curRate, scope, ctx) { curRate = it; debug = RateController.lastDebugEntries }
-                }
+        // ── Service status ──
+        Card(
+            Modifier.fillMaxWidth().clickable { if (!isServiceRunning) onOpenAccessibility() },
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isServiceRunning) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)),
+            elevation = CardDefaults.cardElevation(0.dp)
+        ) {
+            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (isServiceRunning) "●" else "○", fontSize = 10.sp,
+                    color = if (isServiceRunning) MiuiGreen else Color(0xFFFF4D4F))
+                Spacer(Modifier.width(8.dp))
+                Text("无障碍服务", fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                    color = if (isServiceRunning) Color(0xFF2E7D32) else Color(0xFFC62828))
+                Spacer(Modifier.weight(1f))
+                Text(if (isServiceRunning) "监控中" else "点击开启", fontSize = 10.sp, color = MiuiGray)
             }
         }
 
@@ -188,54 +166,24 @@ fun DashboardScreen(
             FilledTonalButton(onClick = {
                 scope.launch(Dispatchers.IO) {
                     RateController.runDiagnostic()
-                    debug = RateController.lastDebugEntries
-                    showDebug = true
+                    debug = RateController.lastDebugEntries; showDebug = true
                 }
             }, Modifier.weight(1f).height(40.dp), shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color.White)
-            ) { Text("诊断", fontSize = 11.sp, color = MiuiText) }
-
+            ) { Text("诊断", fontSize = 12.sp, color = MiuiText) }
             FilledTonalButton(onClick = {
-                scope.launch(Dispatchers.IO) {
-                    curRate = RateController.getCurrentRate(ctx)
-                }
+                scope.launch(Dispatchers.IO) { curRate = RateController.getCurrentRate(ctx) }
             }, Modifier.weight(1f).height(40.dp), shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color.White)
-            ) { Text("刷新", fontSize = 11.sp, color = MiuiText) }
-
+            ) { Text("刷新", fontSize = 12.sp, color = MiuiText) }
             FilledTonalButton(onClick = {
-                showDebug = !showDebug
-                if (!showDebug) RateController.clearDebug()
+                showDebug = !showDebug; if (!showDebug) RateController.clearDebug()
             }, Modifier.weight(0.6f).height(40.dp), shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color.White)
-            ) { Text(if (showDebug) "收起" else "日志", fontSize = 11.sp, color = MiuiText) }
+            ) { Text(if (showDebug) "收起" else "日志", fontSize = 12.sp, color = MiuiText) }
         }
 
-        Spacer(Modifier.height(12.dp))
-
-        // ── Service status (always visible) ──
-        Card(
-            Modifier.fillMaxWidth().clickable { if (!isServiceRunning) onOpenAccessibility() },
-            shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isServiceRunning) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
-            ),
-            elevation = CardDefaults.cardElevation(0.dp)
-        ) {
-            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(if (isServiceRunning) "●" else "○", fontSize = 10.sp,
-                    color = if (isServiceRunning) MiuiGreen else Color(0xFFFF4D4F))
-                Spacer(Modifier.width(8.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("无障碍服务", fontSize = 12.sp, fontWeight = FontWeight.Medium,
-                        color = if (isServiceRunning) Color(0xFF2E7D32) else Color(0xFFC62828))
-                    Text(if (isServiceRunning) "监控中" else "点击开启",
-                        fontSize = 10.sp, color = MiuiGray)
-                }
-            }
-        }
-
-        // ── Debug log (conditional) ──
+        // ── Debug log ──
         if (showDebug && debug.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
@@ -260,11 +208,9 @@ fun DashboardScreen(
 }
 
 @Composable
-fun RowScope.RateButton(
-    rate: Int,
-    curRate: Int,
-    scope: kotlinx.coroutines.CoroutineScope,
-    ctx: android.content.Context,
+fun RowScope.RatePill(
+    rate: Int, curRate: Int,
+    scope: kotlinx.coroutines.CoroutineScope, ctx: android.content.Context,
     onDone: (Int) -> Unit
 ) {
     val active = rate == curRate
@@ -272,16 +218,15 @@ fun RowScope.RateButton(
         onClick = {
             scope.launch(Dispatchers.IO) {
                 RateController.setRate(rate)
-                delay(500) // wait for display to switch
-                val fresh = RateController.getCurrentRate(ctx)
-                onDone(fresh)
+                delay(500)
+                onDone(RateController.getCurrentRate(ctx))
             }
         },
-        modifier = Modifier.weight(1f).height(50.dp),
+        modifier = Modifier.weight(1f).height(48.dp),
         shape = RoundedCornerShape(14.dp),
         colors = if (active) ButtonDefaults.buttonColors(containerColor = MiuiBlue)
         else ButtonDefaults.buttonColors(containerColor = Color(0xFFEEEEEF), contentColor = MiuiText),
         elevation = ButtonDefaults.buttonElevation(0.dp)
-    ) { Text("${rate}Hz", fontSize = if (rate >= 165) 12.sp else 14.sp,
-        fontWeight = if (active) FontWeight.Bold else FontWeight.Normal) }
+    ) { Text("${rate}Hz", fontSize = 14.sp,
+        fontWeight = if (active) FontWeight.Bold else FontWeight.Medium) }
 }
