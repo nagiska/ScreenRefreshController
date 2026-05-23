@@ -159,23 +159,16 @@ fun DashboardScreen(
         Spacer(Modifier.height(16.dp))
 
         // ── Manual buttons ──
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            PROFILE_RATES.forEach { rate ->
-                val active = rate == curRate
-                Button(
-                    onClick = {
-                        scope.launch(Dispatchers.IO) {
-                            RateController.setRate(rate)
-                            curRate = RateController.getCurrentRate()
-                            debug = RateController.lastDebugEntries
-                        }
-                    },
-                    modifier = Modifier.weight(1f).height(50.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = if (active) ButtonDefaults.buttonColors(containerColor = MiuiBlue)
-                    else ButtonDefaults.buttonColors(containerColor = Color(0xFFEEEEEF), contentColor = MiuiText),
-                    elevation = ButtonDefaults.buttonElevation(0.dp)
-                ) { Text("${rate}Hz", fontSize = 13.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal) }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PROFILE_RATES.take(3).forEach { rate ->
+                    RateButton(rate, curRate, scope) { curRate = it; debug = RateController.lastDebugEntries }
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PROFILE_RATES.drop(3).forEach { rate ->
+                    RateButton(rate, curRate, scope) { curRate = it; debug = RateController.lastDebugEntries }
+                }
             }
         }
 
@@ -228,4 +221,29 @@ fun DashboardScreen(
 
         Spacer(Modifier.height(24.dp))
     }
+}
+
+@Composable
+fun RateButton(
+    rate: Int,
+    curRate: Int,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onDone: (Int) -> Unit
+) {
+    val active = rate == curRate
+    Button(
+        onClick = {
+            scope.launch(Dispatchers.IO) {
+                RateController.setRate(rate)
+                val fresh = RateController.getCurrentRate()
+                onDone(fresh)
+            }
+        },
+        modifier = Modifier.weight(1f).height(50.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = if (active) ButtonDefaults.buttonColors(containerColor = MiuiBlue)
+        else ButtonDefaults.buttonColors(containerColor = Color(0xFFEEEEEF), contentColor = MiuiText),
+        elevation = ButtonDefaults.buttonElevation(0.dp)
+    ) { Text("${rate}Hz", fontSize = if (rate >= 165) 12.sp else 14.sp,
+        fontWeight = if (active) FontWeight.Bold else FontWeight.Normal) }
 }
