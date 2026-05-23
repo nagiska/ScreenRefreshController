@@ -59,7 +59,7 @@ fun MainContent() {
     val ctx = LocalContext.current
 
     LaunchedEffect(Unit) {
-        currentRate = RateController.getCurrentRate()
+        currentRate = RateController.getCurrentRate(ctx)
         kernelVer = RateController.getKernelVersion()
         RateController.scanModes()
     }
