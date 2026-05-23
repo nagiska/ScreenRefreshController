@@ -1,7 +1,5 @@
 package com.screenrefresh.controller.root
 
-import android.content.Context
-import android.hardware.display.DisplayManager
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -33,12 +31,10 @@ object RateController {
         Log.d(TAG, "modeMap: $map")
     }
 
-    /** Same as reference APK: DisplayManager.getDisplay(0).getRefreshRate() */
-    suspend fun getCurrentRate(ctx: Context): Int = withContext(Dispatchers.IO) {
-        try {
-            val dm = ctx.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
-            dm.getDisplay(0)?.refreshRate?.toInt() ?: 120
-        } catch (_: Exception) { 120 }
+    /** Read current refresh rate via su + settings — same su pipe */
+    suspend fun getCurrentRate(): Int = withContext(Dispatchers.IO) {
+        val r = suExec("settings get secure miui_refresh_rate")
+        r.output.trim().toFloatOrNull()?.toInt()?.takeIf { it in 30..300 } ?: 120
     }
 
     /** Same as reference APK's setRefreshRate(dumpsysModeId, targetHz) */

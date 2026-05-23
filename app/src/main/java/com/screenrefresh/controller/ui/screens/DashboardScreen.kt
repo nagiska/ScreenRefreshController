@@ -40,7 +40,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalContext
 import com.screenrefresh.controller.root.RateController
 import com.screenrefresh.controller.root.RootExecutor
 import kotlinx.coroutines.Dispatchers
@@ -78,7 +77,6 @@ fun DashboardScreen(
     onOpenAccessibility: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
-    val ctx = LocalContext.current
     var curRate by remember { mutableIntStateOf(currentRate) }
     var kern by remember { mutableStateOf(kernelVersion) }
     var showDebug by remember { mutableStateOf(false) }
@@ -129,7 +127,7 @@ fun DashboardScreen(
                             .clickable {
                                 scope.launch(Dispatchers.IO) {
                                     RateController.setRate(rate)
-                                    curRate = RateController.getCurrentRate(ctx)
+                                    curRate = RateController.getCurrentRate()
                                     debug = RateController.lastDebugEntries
                                 }
                             },
@@ -167,12 +165,12 @@ fun DashboardScreen(
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 PROFILE_RATES.take(3).forEach { rate ->
-                    RateButton(rate, curRate, scope, ctx) { curRate = it; debug = RateController.lastDebugEntries }
+                    RateButton(rate, curRate, scope) { curRate = it; debug = RateController.lastDebugEntries }
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 PROFILE_RATES.drop(3).forEach { rate ->
-                    RateButton(rate, curRate, scope, ctx) { curRate = it; debug = RateController.lastDebugEntries }
+                    RateButton(rate, curRate, scope) { curRate = it; debug = RateController.lastDebugEntries }
                 }
             }
         }
@@ -193,7 +191,7 @@ fun DashboardScreen(
 
             FilledTonalButton(onClick = {
                 scope.launch(Dispatchers.IO) {
-                    curRate = RateController.getCurrentRate(ctx)
+                    curRate = RateController.getCurrentRate()
                 }
             }, Modifier.weight(1f).height(40.dp), shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color.White)
@@ -260,7 +258,6 @@ fun RowScope.RateButton(
     rate: Int,
     curRate: Int,
     scope: kotlinx.coroutines.CoroutineScope,
-    ctx: android.content.Context,
     onDone: (Int) -> Unit
 ) {
     val active = rate == curRate
@@ -268,7 +265,7 @@ fun RowScope.RateButton(
         onClick = {
             scope.launch(Dispatchers.IO) {
                 RateController.setRate(rate)
-                val fresh = RateController.getCurrentRate(ctx)
+                val fresh = RateController.getCurrentRate()
                 onDone(fresh)
             }
         },
