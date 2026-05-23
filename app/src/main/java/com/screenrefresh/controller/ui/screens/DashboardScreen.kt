@@ -1,6 +1,7 @@
 package com.screenrefresh.controller.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -119,7 +120,14 @@ fun DashboardScreen(
                     Box(
                         Modifier.weight(1f).fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(if (active) MiuiBlue else Color(0xFFEEEEEF)),
+                            .background(if (active) MiuiBlue else Color(0xFFEEEEEF))
+                            .clickable {
+                                scope.launch(Dispatchers.IO) {
+                                    RateController.setRate(rate)
+                                    curRate = RateController.getCurrentRate()
+                                    debug = RateController.lastDebugEntries
+                                }
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
