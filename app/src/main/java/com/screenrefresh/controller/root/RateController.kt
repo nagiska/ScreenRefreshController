@@ -39,74 +39,39 @@ object RateController {
         } catch (_: Exception) { 120 }
     }
 
-    /** Execute via su pipe — works for dumpsys, uname, etc. */
-    suspend fun suExec(command: String): RootExecutor.Result = withContext(Dispatchers.IO) {
+    /** Same as reference APK: su pipe, no stdin close */
+    suspend fun suExec(script: String): RootExecutor.Result = withContext(Dispatchers.IO) {
         try {
             val process = Runtime.getRuntime().exec("su")
             val stdin  = DataOutputStream(process.outputStream)
-            val stdout = BufferedReader(InputStreamReader(process.inputStream))
-            val stderr = BufferedReader(InputStreamReader(process.errorStream))
-            stdin.writeBytes("$command\nexit\n")
-            stdin.flush(); stdin.close()
-            val out = stdout.readText().trim()
-            val err = stderr.readText().trim()
+            stdin.writeBytes("$script\nexit\n")
+            stdin.flush()
+            // DO NOT close stdin — reference APK doesn't, killing it breaks KSU
             process.waitFor()
-            RootExecutor.Result(out.isNotEmpty() || err.isEmpty(), out, err, "su")
+            val out = BufferedReader(InputStreamReader(process.inputStream)).readText().trim()
+            RootExecutor.Result(out.isNotEmpty(), out, "", "su")
         } catch (e: Exception) {
             RootExecutor.Result(false, "", e.message ?: "err", "su")
         }
     }
 
-    /** Execute via Shizuku (shell UID) — works for settings put on Xiaomi */
-    private suspend fun shizukuExec(command: String): RootExecutor.Result = withContext(Dispatchers.IO) {
-        try {
-            val clz = Class.forName("rikka.shizuku.Shizuku")
-            val m = clz.getDeclaredMethod("newProcess", Array<String>::class.java)
-            val proc = m.invoke(null, arrayOf("sh", "-c", command))
-            val pCls = proc::class.java
-            val out = (pCls.getDeclaredMethod("getInputStream").invoke(proc) as java.io.InputStream)
-                .bufferedReader().readText().trim()
-            val err = (pCls.getDeclaredMethod("getErrorStream").invoke(proc) as java.io.InputStream)
-                .bufferedReader().readText().trim()
-            val code = pCls.getDeclaredMethod("waitFor").invoke(proc) as Int
-            RootExecutor.Result(code == 0, out, err, "shizuku")
-        } catch (e: Exception) {
-            RootExecutor.Result(false, "", e.message ?: "err", "shizuku")
-        }
-    }
-
-    private suspend fun isShizukuAvailable(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val clz = Class.forName("rikka.shizuku.Shizuku")
-            val m = clz.getDeclaredMethod("pingBinder")
-            m.invoke(null) as? Boolean ?: false
-        } catch (_: Exception) { false }
-    }
-
-    /** Set refresh rate — tries Shizuku first (works on Xiaomi KSU), su as fallback */
+    /** Same as reference APK's setRefreshRate(dumpsysModeId, targetHz) */
     suspend fun setRate(targetHz: Int): Boolean = withContext(Dispatchers.IO) {
         val modeId = hzToModeId[targetHz]
         val entries = mutableListOf<RootExecutor.DebugEntry>()
 
         val script = buildString {
-            if (modeId != null) {
-                appendLine("service call SurfaceFlinger 1035 i32 ${modeId - 1}")
-            }
+            if (modeId != null) appendLine("service call SurfaceFlinger 1035 i32 ${modeId - 1}")
             appendLine("settings put system peak_refresh_rate ${targetHz}.0")
             appendLine("settings put system min_refresh_rate ${targetHz}.0")
             appendLine("settings put system user_refresh_rate $targetHz")
             appendLine("settings put secure miui_refresh_rate $targetHz")
         }
 
-        // Try Shizuku first (works on Xiaomi with KSU), fallback to su
-        val useShizuku = isShizukuAvailable()
-        val result = if (useShizuku) shizukuExec(script.trimEnd()) else suExec(script.trimEnd())
-
-        entries.add(RootExecutor.DebugEntry(
-            "setRate", script.replace("\n", " → ").take(200),
-            result.success, result.output.ifEmpty { "(empty)" },
-            result.error.ifEmpty { "(none)" }, 0, if (useShizuku) "shizuku" else "su"
-        ))
+        val result = suExec(script.trimEnd())
+        entries.add(RootExecutor.DebugEntry("setRate",
+            script.replace("\n"," → ").take(160),
+            result.success, result.output.ifEmpty { "(empty)" }, "", 0, "su"))
         lastDebugEntries = entries
         result.success
     }
@@ -114,10 +79,10 @@ object RateController {
     suspend fun runDiagnostic() {
         val entries = mutableListOf<RootExecutor.DebugEntry>()
         scanModes()
-        entries.add(RootExecutor.DebugEntry("modes", "dumpsys scan", hzToModeId.isNotEmpty(),
+        entries.add(RootExecutor.DebugEntry("modes", "scan", hzToModeId.isNotEmpty(),
             hzToModeId.toString().ifEmpty { "(empty)" }, "", 0, ""))
-        entries.add(RootExecutor.DebugEntry("shizuku", "available", isShizukuAvailable(),
-            if (isShizukuAvailable()) "YES" else "NO", "", 0, ""))
+        entries.add(RootExecutor.DebugEntry("cur", "display", true,
+            "using Display.getRefreshRate()", "", 0, ""))
         lastDebugEntries = entries
     }
 
