@@ -41,31 +41,47 @@ class AppDetectionService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         _isRunning.value = true
-        startForeground(1, buildNotification("监控中"))
+        try {
+            startForeground(1, buildNotification("监控中"))
+        } catch (e: Exception) {
+            val nm = getSystemService(android.app.NotificationManager::class.java)
+            nm?.notify(1, buildNotification("SF失败: ${e.message}"))
+        }
         scope.launch { RateController.scanModes() }
     }
 
+    private var eventCount = 0
+
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        eventCount++
         val pkg = event.packageName?.toString() ?: return
         if (pkg.isEmpty() || pkg == currentPackage) return
         currentPackage = pkg
+
+        // Log to notification so user can see detection working
+        val nm = getSystemService(android.app.NotificationManager::class.java)
+        nm?.notify(1, buildNotification("检测: $pkg (#$eventCount)"))
+
         checkApp(pkg)
     }
 
     private fun checkApp(pkg: String) {
         scope.launch {
-            val db = ScreenRefreshApp.instance.db
-            val entity = db.whitelistDao().getByPackage(pkg)
-            if (entity != null) {
+            try {
+                val db = ScreenRefreshApp.instance.db
+                val entity = db.whitelistDao().getByPackage(pkg)
+                if (entity != null) {
+                    val nm = getSystemService(android.app.NotificationManager::class.java)
+                    nm?.notify(1, buildNotification("${entity.appName} → ${entity.targetRate}Hz"))
+                    startStepping(entity.targetRate)
+                } else {
+                    stopStepping()
+                    RateController.resetTo120()
+                }
+            } catch (e: Exception) {
                 val nm = getSystemService(android.app.NotificationManager::class.java)
-                nm?.notify(1, buildNotification("${entity.appName} → ${entity.targetRate}Hz"))
-                startStepping(entity.targetRate)
-            } else {
-                stopStepping()
-                RateController.resetTo120()
-                val nm = getSystemService(android.app.NotificationManager::class.java)
-                nm?.notify(1, buildNotification("监控中"))
+                nm?.notify(1, buildNotification("错误: ${e.message}"))
             }
         }
     }
@@ -74,9 +90,14 @@ class AppDetectionService : AccessibilityService() {
         stepperJob?.cancel()
         val chain = Stepper.getChain(targetRate)
         stepperJob = scope.launch {
-            for (rate in chain) {
-                RateController.setRate(rate)
-                if (rate != chain.last()) delay(2000)
+            try {
+                for (rate in chain) {
+                    RateController.setRate(rate)
+                    if (rate != chain.last()) delay(2000)
+                }
+            } catch (e: Exception) {
+                val nm = getSystemService(android.app.NotificationManager::class.java)
+                nm?.notify(1, buildNotification("步进失败: ${e.message}"))
             }
         }
     }
