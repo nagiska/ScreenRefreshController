@@ -31,6 +31,8 @@ class AppDetectionService : AccessibilityService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var stepperJob: Job? = null
     private var currentPackage: String = ""
+    private var steppingActive = false
+    private var lastCheckTime = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -55,11 +57,21 @@ class AppDetectionService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         eventCount++
-        val pkg = event.packageName?.toString() ?: return
-        if (pkg.isEmpty() || pkg == currentPackage) return
-        currentPackage = pkg
+        val rawPkg = event.packageName?.toString() ?: return
+        // Filter sub-processes like com.app:sandboxed_process
+        val pkg = rawPkg.substringBefore(":")
+        if (pkg.isEmpty()) return
 
-        // Log to notification so user can see detection working
+        // Debounce: max 1 check per second
+        val now = System.currentTimeMillis()
+        if (now - lastCheckTime < 1000 && pkg == currentPackage) return
+
+        // If same main app but sub-process changed, don't cancel stepping
+        if (pkg == currentPackage && steppingActive) return
+
+        currentPackage = pkg
+        lastCheckTime = now
+
         val nm = getSystemService(android.app.NotificationManager::class.java)
         nm?.notify(1, buildNotification("检测: $pkg (#$eventCount)"))
 
@@ -88,6 +100,7 @@ class AppDetectionService : AccessibilityService() {
 
     private suspend fun startStepping(targetRate: Int) {
         stepperJob?.cancel()
+        steppingActive = true
         val chain = Stepper.getChain(targetRate)
         stepperJob = scope.launch {
             try {
@@ -95,9 +108,13 @@ class AppDetectionService : AccessibilityService() {
                     RateController.setRate(rate)
                     if (rate != chain.last()) delay(2000)
                 }
+            } catch (_: kotlinx.coroutines.CancellationException) {
+                // Expected when switching apps
             } catch (e: Exception) {
                 val nm = getSystemService(android.app.NotificationManager::class.java)
                 nm?.notify(1, buildNotification("步进失败: ${e.message}"))
+            } finally {
+                steppingActive = false
             }
         }
     }
@@ -105,6 +122,7 @@ class AppDetectionService : AccessibilityService() {
     private fun stopStepping() {
         stepperJob?.cancel()
         stepperJob = null
+        steppingActive = false
     }
 
     override fun onInterrupt() {}
