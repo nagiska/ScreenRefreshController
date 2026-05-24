@@ -208,8 +208,8 @@ class AppDetectionService : AccessibilityService() {
 
     // ── Daemon (foreground app detection + auto-step) ──
 
-    private var currentStepChain = emptyList<Int>()
-    private var currentStepIdx = -1
+    private var steppingActive = false
+    private var stepDir = 0 // 0=none, 1=up, -1=down
 
     private fun startDaemon() {
         daemonJob?.cancel()
@@ -221,14 +221,18 @@ class AppDetectionService : AccessibilityService() {
 
                     val pkg = getForegroundPackage()
                     if (pkg != null && pkg != lastPkg) {
+                        val oldPkg = lastPkg
+                        lastPkg = pkg
                         val entity = ScreenRefreshApp.instance.db.whitelistDao().getByPackage(pkg)
                         if (entity != null) {
-                            lastPkg = pkg; lastTargetHz = entity.targetRate
-                            stepUp(entity.targetRate)
-                        } else if (lastPkg.isNotEmpty() && lastTargetHz > 120) {
-                            // Exiting whitelisted app → step down
+                            // Only start stepping if not already stepping up
+                            if (!steppingActive || stepDir != 1) {
+                                lastTargetHz = entity.targetRate
+                                stepUp(entity.targetRate)
+                            }
+                        } else if (oldPkg.isNotEmpty() && steppingActive) {
                             stepDown()
-                            lastPkg = ""
+                            lastTargetHz = 120
                         }
                     }
                 } catch (_: Exception) {}
@@ -239,8 +243,9 @@ class AppDetectionService : AccessibilityService() {
 
     private suspend fun stepUp(targetHz: Int) {
         stepperJob?.cancel()
+        steppingActive = true; stepDir = 1
         val chain = Stepper.getChain(targetHz)
-        currentStepChain = chain; currentStepIdx = 0
+        currentStepChain = chain
         stepperJob = scope.launch {
             try {
                 for ((i, rate) in chain.withIndex()) {
@@ -250,19 +255,21 @@ class AppDetectionService : AccessibilityService() {
                     if (rate != chain.last()) delay(2000)
                 }
             } catch (_: kotlinx.coroutines.CancellationException) {}
+            finally { steppingActive = false; stepDir = 0 }
         }
     }
 
     private suspend fun stepDown() {
         stepperJob?.cancel()
+        steppingActive = true; stepDir = -1
         val chain = currentStepChain.toList()
         if (chain.size <= 1 || currentStepIdx <= 0) {
             RateController.resetTo120()
             updateOverlayRate(RateController.getCurrentRate(this@AppDetectionService))
-            lastTargetHz = 120; currentStepChain = emptyList()
+            steppingActive = false; stepDir = 0
+            currentStepChain = emptyList()
             return
         }
-        // Step backwards from current position down to 120
         val downChain = chain.take(currentStepIdx + 1).reversed().drop(1)
         stepperJob = scope.launch {
             try {
@@ -274,8 +281,8 @@ class AppDetectionService : AccessibilityService() {
                 RateController.resetTo120()
                 updateOverlayRate(RateController.getCurrentRate(this@AppDetectionService))
             } catch (_: kotlinx.coroutines.CancellationException) {}
+            finally { steppingActive = false; stepDir = 0; currentStepChain = emptyList() }
         }
-        lastTargetHz = 120; currentStepChain = emptyList()
     }
 
     private suspend fun getForegroundPackage(): String? {
