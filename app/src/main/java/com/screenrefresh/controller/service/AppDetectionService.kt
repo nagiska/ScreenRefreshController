@@ -7,6 +7,8 @@ import android.app.NotificationManager
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -33,6 +35,7 @@ class AppDetectionService : AccessibilityService() {
         val isRunning = MutableStateFlow(false)
     }
 
+    private val handler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var stepperJob: Job? = null
     private var daemonJob: Job? = null
@@ -112,13 +115,13 @@ class AppDetectionService : AccessibilityService() {
 
     private fun updateOverlayRate(rate: Int) {
         curRate = rate
-        mainHandler.post {
+        handler.post {
             rateText?.text = "✓ $rate Hz"
         }
     }
 
     private fun updateOverlayRates(rates: List<Int>) {
-        mainHandler.post {
+        handler.post {
             rateBtns?.removeAllViews()
             rates.sorted().forEach { rate ->
                 val btn = TextView(this).apply {
