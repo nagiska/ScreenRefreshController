@@ -264,7 +264,7 @@ class AppDetectionService : AccessibilityService() {
                 for ((i, rate) in chain.withIndex()) {
                     RateController.setRate(rate)
                     currentStepIdx = i
-                    updateOverlayRate(RateController.getCurrentRate(this@AppDetectionService))
+                    updateOverlayRateRaw(RateController.getCurrentRate(this@AppDetectionService))
                     if (rate != chain.last()) delay(2000)
                 }
             } catch (_: kotlinx.coroutines.CancellationException) {}
@@ -278,7 +278,7 @@ class AppDetectionService : AccessibilityService() {
         val chain = currentStepChain.toList()
         if (chain.size <= 1 || currentStepIdx <= 0) {
             RateController.resetTo120()
-            updateOverlayRate(RateController.getCurrentRate(this@AppDetectionService))
+            updateOverlayRateRaw(RateController.getCurrentRate(this@AppDetectionService))
             steppingActive = false; stepDir = 0
             currentStepChain = emptyList()
             return
@@ -288,11 +288,11 @@ class AppDetectionService : AccessibilityService() {
             try {
                 for (rate in downChain) {
                     RateController.setRate(rate)
-                    updateOverlayRate(RateController.getCurrentRate(this@AppDetectionService))
+                    updateOverlayRateRaw(RateController.getCurrentRate(this@AppDetectionService))
                     if (rate != downChain.last()) delay(1500)
                 }
                 RateController.resetTo120()
-                updateOverlayRate(RateController.getCurrentRate(this@AppDetectionService))
+                updateOverlayRateRaw(RateController.getCurrentRate(this@AppDetectionService))
             } catch (_: kotlinx.coroutines.CancellationException) {}
             finally { steppingActive = false; stepDir = 0; currentStepChain = emptyList() }
         }
