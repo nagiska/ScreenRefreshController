@@ -35,7 +35,8 @@ import kotlinx.coroutines.launch
 class AppDetectionService : AccessibilityService() {
 
     companion object {
-        val isRunning = kotlinx.coroutines.flow.MutableStateFlow(false)
+        private val _isRunning = kotlinx.coroutines.flow.MutableStateFlow(false)
+        val isRunning: kotlinx.coroutines.flow.StateFlow<Boolean> = _isRunning
         private const val ACTION_TOGGLE = "com.screenrefresh.TOGGLE_OVERLAY"
     }
 
@@ -64,17 +65,21 @@ class AppDetectionService : AccessibilityService() {
 
     override fun onCreate() {
         super.onCreate()
-        isRunning.value = true
+        _isRunning.value = true
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val c = NotificationChannel("rate", "刷新率", NotificationManager.IMPORTANCE_LOW)
             getSystemService(NotificationManager::class.java).createNotificationChannel(c)
         }
-        registerReceiver(toggleReceiver, IntentFilter(ACTION_TOGGLE))
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                registerReceiver(toggleReceiver, IntentFilter(ACTION_TOGGLE), RECEIVER_EXPORTED)
+            else @Suppress("DEPRECATION") registerReceiver(toggleReceiver, IntentFilter(ACTION_TOGGLE))
+        } catch (_: Exception) {}
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        isRunning.value = true
+        _isRunning.value = true
         try { startForeground(1, buildToggleNotification()) } catch (_: Exception) {}
         scope.launch {
             RateController.scanModes()
@@ -292,7 +297,7 @@ class AppDetectionService : AccessibilityService() {
         hideOverlay()
         try { unregisterReceiver(toggleReceiver) } catch (_: Exception) {}
         scope.launch { RateController.resetTo120() }
-        isRunning.value = false
+        _isRunning.value = false
         super.onDestroy()
     }
 }
