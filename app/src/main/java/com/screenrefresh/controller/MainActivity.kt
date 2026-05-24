@@ -20,7 +20,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -31,8 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import com.screenrefresh.controller.root.RateController
-import com.screenrefresh.controller.root.RootExecutor
-import com.screenrefresh.controller.service.AppDetectionService
 import com.screenrefresh.controller.ui.screens.DashboardScreen
 import com.screenrefresh.controller.ui.screens.MiuiBlue
 import com.screenrefresh.controller.ui.screens.MiuiBg
@@ -56,8 +53,8 @@ fun MainContent() {
     var currentRate by remember { mutableIntStateOf(120) }
     var kernelVer by remember { mutableStateOf("loading...") }
     var availableRates by remember { mutableStateOf<List<Int>>(emptyList()) }
-    val isServiceRunning by AppDetectionService.isRunning.collectAsState()
     val ctx = LocalContext.current
+    var isServiceRunning by remember { mutableStateOf(isAccessibilityOn(ctx)) }
 
     LaunchedEffect(Unit) {
         RateController.scanModes()
@@ -99,4 +96,11 @@ fun MainContent() {
             }
         }
     }
+}
+
+fun isAccessibilityOn(ctx: android.content.Context): Boolean {
+    val enabled = Settings.Secure.getString(
+        ctx.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+    ) ?: return false
+    return enabled.contains(ctx.packageName)
 }

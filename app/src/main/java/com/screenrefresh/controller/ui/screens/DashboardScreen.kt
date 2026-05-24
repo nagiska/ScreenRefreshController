@@ -155,7 +155,7 @@ fun DashboardScreen(
                 Text("无障碍服务", fontSize = 12.sp, fontWeight = FontWeight.Medium,
                     color = if (isServiceRunning) Color(0xFF2E7D32) else Color(0xFFC62828))
                 Spacer(Modifier.weight(1f))
-                Text(if (isServiceRunning) "监控中" else "点击开启", fontSize = 10.sp, color = MiuiGray)
+                Text(if (isServiceRunning) "已开启" else "点击开启", fontSize = 10.sp, color = MiuiGray)
             }
         }
 
