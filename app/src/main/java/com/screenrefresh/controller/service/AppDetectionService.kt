@@ -210,6 +210,8 @@ class AppDetectionService : AccessibilityService() {
 
     private var steppingActive = false
     private var stepDir = 0 // 0=none, 1=up, -1=down
+    private var currentStepChain = emptyList<Int>()
+    private var currentStepIdx = -1
 
     private fun startDaemon() {
         daemonJob?.cancel()
