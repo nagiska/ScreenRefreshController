@@ -72,7 +72,7 @@ object RateController {
     }
 
     /** Persistent su pipe — same as reference APK */
-    private suspend fun suExec(command: String): RootExecutor.Result = withContext(Dispatchers.IO) {
+    suspend fun suExec(command: String): RootExecutor.Result = withContext(Dispatchers.IO) {
         try {
             val process = Runtime.getRuntime().exec("su")
             val stdin  = DataOutputStream(process.outputStream)
