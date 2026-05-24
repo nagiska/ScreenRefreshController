@@ -232,7 +232,7 @@ class AppDetectionService : AccessibilityService() {
                                 lastTargetHz = entity.targetRate
                                 stepUp(entity.targetRate)
                             }
-                        } else if (oldPkg.isNotEmpty() && steppingActive) {
+                        } else if (oldPkg.isNotEmpty() && lastTargetHz > 120) {
                             stepDown()
                             lastTargetHz = 120
                         }
