@@ -41,6 +41,7 @@ class AppDetectionService : AccessibilityService() {
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var manualOverride = false
     private val handler = Handler(Looper.getMainLooper())
     private var stepperJob: Job? = null
     private var daemonJob: Job? = null
@@ -176,7 +177,7 @@ class AppDetectionService : AccessibilityService() {
         try { startForeground(1, buildToggleNotification()) } catch (_: Exception) {}
     }
 
-    private fun updateOverlayRate(rate: Int) {
+    private fun updateOverlayRateRaw(rate: Int) {
         curRate = rate
         if (!overlayVisible) return
         handler.post {
@@ -196,9 +197,15 @@ class AppDetectionService : AccessibilityService() {
                 setTextColor(if (rate == curRate) 0xFFFFFFFF.toInt() else 0xFF1A1A1A.toInt())
                 setOnClickListener {
                     scope.launch {
+                        manualOverride = true
                         RateController.setRate(rate)
-                        val newRate = RateController.getCurrentRate(this@AppDetectionService)
-                        updateOverlayRate(newRate)
+                        // Read back from settings for consistency
+                        delay(300)
+                        val r = RateController.suExec("settings get secure miui_refresh_rate")
+                        val raw = r.output.trim().toFloatOrNull()?.toInt() ?: rate
+                        curRate = raw; updateOverlayRateRaw(raw)
+                        delay(2000)
+                        manualOverride = false
                     }
                 }
             }
@@ -218,8 +225,12 @@ class AppDetectionService : AccessibilityService() {
         daemonJob = scope.launch {
             while (isActive) {
                 try {
-                    val rate = RateController.getCurrentRate(this@AppDetectionService)
-                    if (rate != curRate) updateOverlayRate(rate)
+                    // Skip daemon work during manual override
+                    if (manualOverride) { delay(2000); continue }
+
+                    val rate = RateController.suExec("settings get secure miui_refresh_rate")
+                    val raw = rate.output.trim().toFloatOrNull()?.toInt() ?: curRate
+                    if (raw != curRate) updateOverlayRateRaw(raw)
 
                     val pkg = getForegroundPackage()
                     if (pkg != null && pkg != lastPkg) {
