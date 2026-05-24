@@ -68,24 +68,19 @@ class AppDetectionService : AccessibilityService() {
     }
 
     private suspend fun getForegroundPackage(): String? {
-        // Try dumpsys window first (most reliable on Xiaomi)
-        var r = RateController.suExec("dumpsys window 2>/dev/null | grep mCurrentFocus")
-        // mCurrentFocus=Window{... u0 com.app/com.app.Activity}
-        var m = Regex("""u0\s+([\w.]+)/""").find(r.output)
-        if (m != null) return m.groupValues[1]
+        // Debug: show raw dumpsys window output
+        val r = RateController.suExec("dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp'")
+        notify(1, notif("raw: ${r.output.take(80)}"))
 
-        // Fallback: dumpsys activity
-        r = RateController.suExec("dumpsys activity activities 2>/dev/null | grep mResumedActivity")
-        m = Regex("""u0\s+([\w.]+)/""").find(r.output)
-        if (m != null) return m.groupValues[1]
-
-        // Last fallback: usage stats
-        return try {
-            val usm = getSystemService(android.content.Context.USAGE_STATS_SERVICE) as android.app.usage.UsageStatsManager
-            val now = System.currentTimeMillis()
-            val stats = usm.queryUsageStats(android.app.usage.UsageStatsManager.INTERVAL_DAILY, now - 5000, now)
-            stats.maxByOrNull { it.lastTimeUsed }?.packageName
-        } catch (_: Exception) { null }
+        // Try parsing: mCurrentFocus=Window{... u0 com.app/com.app.Activity}
+        for (pat in listOf(
+            Regex("""u0\s+([\w.]+)/"""),
+            Regex("""([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+)/"""),
+        )) {
+            val m = pat.find(r.output)
+            if (m != null) return m.groupValues[1]
+        }
+        return null
     }
 
     private suspend fun stepTo(targetHz: Int) {
